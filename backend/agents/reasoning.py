@@ -1218,16 +1218,42 @@ class StrategicReasoner:
         return mapping.get(agent_name, ["demand", "competition"])
 
     def _summarize_research_topic(self, external_research: BrightDataResearch, topic: str) -> str:
-        summaries = external_research.summaries(topic, limit=1)
-        if not summaries:
+        hits = external_research.get(topic)
+        if not hits:
             return ""
-        summary = summaries[0]
+        best_hit = max(hits, key=lambda hit: self._research_hit_score(topic, hit.title, hit.snippet))
+        snippet = best_hit.snippet.strip()
+        title = best_hit.title.strip()
+        if snippet and self._research_hit_score(topic, snippet, snippet) >= self._research_hit_score(topic, title, ""):
+            summary = snippet
+        elif snippet:
+            summary = f"{title}. {snippet}" if title else snippet
+        else:
+            summary = title
         return summary[:220].rstrip(".")
 
     def _keyword_balance(self, text: str, positive: List[str], negative: List[str]) -> int:
         positive_hits = sum(text.count(keyword) for keyword in positive)
         negative_hits = sum(text.count(keyword) for keyword in negative)
         return positive_hits - negative_hits
+
+    def _research_hit_score(self, topic: str, title: str, snippet: str) -> int:
+        text = f"{title} {snippet}".lower()
+        topic_keywords = {
+            "demand": ["demand", "popular", "students", "near you", "foot traffic", "growing", "gaming"],
+            "competition": ["competitor", "alternatives", "gaming cafe", "arcade", "bowling", "zone"],
+            "pricing": ["price", "pricing", "cost", "ticket", "entry", "recharge", "membership", "rs", "$", "₹"],
+            "location": ["college", "campus", "students", "near", "city", "mall"],
+            "risk": ["permit", "license", "cost", "setup", "investment", "safety", "compliance"],
+        }
+        score = len(snippet)
+        for keyword in topic_keywords.get(topic, []):
+            score += text.count(keyword) * 25
+        if any(symbol in text for symbol in ["$", "₹", "rs", "usd", "inr"]):
+            score += 40
+        if "pdf" in text and len(snippet) < 40:
+            score -= 30
+        return score
 
     def _research_demand_multiplier(self, external_research: BrightDataResearch) -> float:
         if not external_research.has_hits():
