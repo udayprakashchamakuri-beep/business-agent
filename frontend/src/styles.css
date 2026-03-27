@@ -513,7 +513,7 @@ a {
 .stream-body {
   flex: 1;
   overflow-y: auto;
-  padding: 30px 32px 24px;
+  padding: 30px 32px 32px;
 }
 
 .stream-empty {
@@ -608,6 +608,10 @@ a {
 .debate-message.user {
   margin-left: auto;
   flex-direction: row-reverse;
+}
+
+.latest-user-message {
+  margin-bottom: 8px;
 }
 
 .debate-message.active .message-icon {
@@ -3300,6 +3304,11 @@ a {
   border: 1px dashed rgba(255, 255, 255, 0.12);
   border-radius: 22px;
   background: rgba(7, 13, 31, 0.4);
+}
+
+.conversation-end-anchor {
+  height: 1px;
+  scroll-margin-bottom: 140px;
 }
 
 .utility-overlay {

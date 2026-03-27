@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react";
 import { formatDecisionLabel, toPlainText } from "../plainLanguage";
 
 function SimulationView({
@@ -31,6 +32,7 @@ function SimulationView({
   onOpenAgentProfile,
   onClearAgentConversation,
 }) {
+  const conversationEndRef = useRef(null);
   const speakingMeta = agentMeta[speakingAgent] ?? agentMeta["CEO Agent"];
   const activeConversationMeta = conversationAgentName ? agentMeta[conversationAgentName] ?? agentMeta["CEO Agent"] : null;
   const filteredRounds = conversationAgentName
@@ -39,6 +41,20 @@ function SimulationView({
         .filter(([, turns]) => turns.length)
     : groupedConversation;
   const hasAdvisorMessages = filteredRounds.some(([, turns]) => turns.length);
+  const visibleTurnCount = filteredRounds.reduce((count, [, turns]) => count + turns.length, 0);
+  const latestUserMessage = chatMessages[chatMessages.length - 1] ?? null;
+  const earlierUserMessages = useMemo(() => chatMessages.slice(0, -1), [chatMessages]);
+
+  useEffect(() => {
+    if (!conversationEndRef.current) {
+      return;
+    }
+
+    conversationEndRef.current.scrollIntoView({
+      behavior: loading ? "smooth" : "auto",
+      block: "end",
+    });
+  }, [chatMessages.length, visibleTurnCount, loading, conversationAgentName]);
 
   return (
     <>
@@ -150,15 +166,15 @@ function SimulationView({
               </div>
             ) : null}
 
-            {chatMessages.length ? (
-              <section className="round-section user-round-section">
+            {earlierUserMessages.length ? (
+              <section className="round-section user-history-section">
                 <div className="round-divider">
                   <div />
-                  <span>Your conversation</span>
+                  <span>Earlier notes from you</span>
                   <div />
                 </div>
 
-                {chatMessages.map((message, index) => (
+                {earlierUserMessages.map((message, index) => (
                   <article key={message.id ?? `${message.timestamp}-${index}`} className="debate-message user">
                     <div className="message-icon user">
                       <span className="material-symbols-outlined">person</span>
@@ -166,7 +182,7 @@ function SimulationView({
                     <div className="message-content">
                       <div className="message-meta">
                         <span className="message-name">You</span>
-                        <span className="message-time">{index === chatMessages.length - 1 ? "Latest message" : "Earlier message"}</span>
+                        <span className="message-time">Earlier message</span>
                       </div>
                       <div className="message-bubble user">{toPlainText(message.content)}</div>
                       {message.targetAgentName ? (
@@ -177,6 +193,36 @@ function SimulationView({
                     </div>
                   </article>
                 ))}
+              </section>
+            ) : null}
+
+            {latestUserMessage ? (
+              <section className="round-section latest-user-section">
+                <div className="round-divider">
+                  <div />
+                  <span>Your latest message</span>
+                  <div />
+                </div>
+
+                <article className="debate-message user latest-user-message">
+                  <div className="message-icon user">
+                    <span className="material-symbols-outlined">person</span>
+                  </div>
+                  <div className="message-content">
+                    <div className="message-meta">
+                      <span className="message-name">You</span>
+                      <span className="message-time">Just sent</span>
+                    </div>
+                    <div className="message-bubble user">{toPlainText(latestUserMessage.content)}</div>
+                    <div className="message-tags">
+                      <span className="message-tag soft">
+                        {latestUserMessage.targetAgentName
+                          ? `Sent to ${agentMeta[latestUserMessage.targetAgentName]?.label ?? latestUserMessage.targetAgentName}`
+                          : "Sent to all advisors"}
+                      </span>
+                    </div>
+                  </div>
+                </article>
               </section>
             ) : null}
 
@@ -264,6 +310,8 @@ function SimulationView({
                 </div>
               </div>
             ) : null}
+
+            <div ref={conversationEndRef} className="conversation-end-anchor" />
           </div>
 
           <footer className="stream-footer">
