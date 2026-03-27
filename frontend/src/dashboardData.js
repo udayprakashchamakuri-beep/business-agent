@@ -1,4 +1,5 @@
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+export const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "https://skill-deploy-k7d88gkjv0-codex-agent-deploys.vercel.app";
 
 export const NAV_ITEMS = [
   { id: "simulation", label: "Simulation", icon: "hub" },
