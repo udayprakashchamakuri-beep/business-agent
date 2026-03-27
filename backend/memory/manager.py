@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +20,18 @@ from backend.controller.schemas import (
 
 
 class MemoryManager:
-    STORAGE_PATH = Path(__file__).resolve().parent / "persistent_history.json"
+    STORAGE_PATH = Path(
+        os.getenv(
+            "MEMORY_STORAGE_PATH",
+            str(
+                (
+                    Path(tempfile.gettempdir()) / "business_agent_persistent_history.json"
+                    if os.getenv("VERCEL")
+                    else Path(__file__).resolve().parent / "persistent_history.json"
+                )
+            ),
+        )
+    )
     BOARD_AGENTS = [
         "CEO Agent",
         "Startup Builder Agent",
@@ -203,9 +216,14 @@ class MemoryManager:
             with self.STORAGE_PATH.open("r", encoding="utf-8") as handle:
                 payload = json.load(handle)
                 return payload if isinstance(payload, list) else []
-        except json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             return []
 
     def _save_records(self, records: List[dict]) -> None:
-        with self.STORAGE_PATH.open("w", encoding="utf-8") as handle:
-            json.dump(records, handle, indent=2)
+        try:
+            self.STORAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with self.STORAGE_PATH.open("w", encoding="utf-8") as handle:
+                json.dump(records, handle, indent=2)
+        except OSError:
+            # Serverless deployments may not guarantee durable writable storage.
+            return
