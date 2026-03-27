@@ -787,60 +787,10 @@ a {
 
 .stream-footer {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(21, 27, 45, 0.88);
-  padding: 12px 16px;
-}
-
-.footer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.footer-actions {
-  gap: 12px;
-}
-
-.footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.footer-metrics {
-  gap: 12px;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 0.58rem;
-  letter-spacing: 0.15em;
-  color: rgba(193, 199, 207, 0.48);
-}
-
-.footer-bars,
-.micro-bars,
-.micro-track {
-  display: flex;
-  gap: 4px;
-  align-items: flex-end;
-}
-
-.footer-bars div {
-  width: 4px;
-  border-radius: 1px;
-  background: rgba(0, 255, 148, 0.3);
-}
-
-.footer-bars div:nth-child(1),
-.footer-bars div:nth-child(2) {
-  height: 14px;
-  background: var(--finance);
-}
-
-.footer-bars div:nth-child(3),
-.footer-bars div:nth-child(4) {
-  height: 14px;
+  padding: 10px 14px;
 }
 
 .discussion-composer {
@@ -935,6 +885,21 @@ a {
 .composer-hint {
   max-width: 70%;
   margin: 0;
+}
+
+.composer-action-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.composer-status {
+  color: rgba(193, 199, 207, 0.5);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.56rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .obsidian-insights {

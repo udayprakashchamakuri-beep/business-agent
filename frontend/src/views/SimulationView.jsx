@@ -126,7 +126,7 @@ function SimulationView({
                 Use Example
               </button>
               <button type="button" className="primary-action" onClick={onToggleConsole}>
-                Start Analysis
+                Open Detailed Form
               </button>
             </div>
           </div>
@@ -331,28 +331,6 @@ function SimulationView({
           </div>
 
           <footer className="stream-footer">
-            <div className="footer-top">
-              <div className="footer-actions">
-                <button type="button" className="footer-link" onClick={onToggleConsole}>
-                  <span className="material-symbols-outlined">list_alt</span>
-                  Open Detailed Form
-                </button>
-                <button type="button" className="footer-link" onClick={onApplySample}>
-                  <span className="material-symbols-outlined">history</span>
-                  Load Example
-                </button>
-              </div>
-              <div className="footer-metrics">
-                <span>System status: {result ? "Live" : "Waiting"}</span>
-                <div className="footer-bars">
-                  <div />
-                  <div />
-                  <div />
-                  <div />
-                </div>
-              </div>
-            </div>
-
             <form
               className="discussion-composer"
               onSubmit={(event) => {
@@ -405,9 +383,12 @@ function SimulationView({
                       ? `Your next message will focus on ${chatTargetLabels.join(", ")}.`
                     : "Tip: mention your market, cash situation, team size, pricing, or any big concern."}
                 </span>
-                <button type="submit" className="primary-action" disabled={loading || chatDraft.trim().length < 20}>
-                  {loading ? "Reviewing your message..." : "Send to advisors"}
-                </button>
+                <div className="composer-action-group">
+                  <span className="composer-status">{loading ? "Advisors are reviewing..." : result ? "Latest reply visible above" : "Ready for your question"}</span>
+                  <button type="submit" className="primary-action" disabled={loading || chatDraft.trim().length < 20}>
+                    {loading ? "Reviewing..." : "Send"}
+                  </button>
+                </div>
               </div>
             </form>
           </footer>
