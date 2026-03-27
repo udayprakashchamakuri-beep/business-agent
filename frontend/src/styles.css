@@ -842,6 +842,56 @@ a {
   padding: 16px;
 }
 
+.composer-targets {
+  display: grid;
+  gap: 10px;
+}
+
+.composer-target-label {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(193, 199, 207, 0.5);
+}
+
+.composer-target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(21, 27, 45, 0.84);
+  padding: 8px 12px;
+  color: rgba(220, 225, 251, 0.72);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.target-chip .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.target-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.target-chip.active {
+  border-color: color-mix(in srgb, var(--target-accent, var(--accent)) 28%, transparent);
+  background: color-mix(in srgb, var(--target-accent, var(--accent)) 14%, rgba(21, 27, 45, 0.84));
+  color: color-mix(in srgb, var(--target-accent, var(--accent)) 78%, white 12%);
+}
+
 .composer-header strong {
   display: block;
   font-family: "Manrope", sans-serif;

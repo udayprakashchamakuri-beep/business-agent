@@ -6,6 +6,7 @@ function SimulationView({
   loading,
   chatMessages,
   chatDraft,
+  chatTargetAgentName,
   activeTypingAgent,
   speakingAgent,
   groupedConversation,
@@ -24,6 +25,7 @@ function SimulationView({
   onApplySample,
   onChatDraftChange,
   onSubmitChat,
+  onSelectChatTarget,
   conversationAgentName,
   onOpenAgentConversation,
   onOpenAgentProfile,
@@ -167,6 +169,11 @@ function SimulationView({
                         <span className="message-time">{index === chatMessages.length - 1 ? "Latest message" : "Earlier message"}</span>
                       </div>
                       <div className="message-bubble user">{toPlainText(message.content)}</div>
+                      {message.targetAgentName ? (
+                        <div className="message-tags">
+                          <span className="message-tag soft">Sent to {agentMeta[message.targetAgentName]?.label ?? message.targetAgentName}</span>
+                        </div>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -292,18 +299,50 @@ function SimulationView({
               <div className="composer-header">
                 <div>
                   <strong>Ask in normal language</strong>
-                  <p>Type just like a chat. You can add follow-up details after the first answer and the team will rerun the review.</p>
+                  <p>Type just like a chat. You can send your note to the whole team or to one specific advisor.</p>
+                </div>
+              </div>
+              <div className="composer-targets">
+                <span className="composer-target-label">Talk to</span>
+                <div className="composer-target-chips">
+                  <button
+                    type="button"
+                    className={chatTargetAgentName ? "target-chip" : "target-chip active"}
+                    onClick={() => onSelectChatTarget("")}
+                  >
+                    All advisors
+                  </button>
+                  {Object.entries(agentMeta).map(([name, meta]) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className={chatTargetAgentName === name ? "target-chip active" : "target-chip"}
+                      style={{ "--target-accent": meta.accent }}
+                      onClick={() => onSelectChatTarget(name)}
+                    >
+                      <span className="material-symbols-outlined">{meta.symbol}</span>
+                      {meta.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               <textarea
                 className="composer-textarea"
                 rows="4"
-                placeholder="Example: We are a small SaaS company thinking about expanding into hospitals, but we only have 10 months of cash left. Should we launch now or wait?"
+                placeholder={
+                  chatTargetAgentName
+                    ? `Ask ${agentMeta[chatTargetAgentName]?.label ?? "this advisor"} something in plain language...`
+                    : "Example: We are a small SaaS company thinking about expanding into hospitals, but we only have 10 months of cash left. Should we launch now or wait?"
+                }
                 value={chatDraft}
                 onChange={(event) => onChatDraftChange(event.target.value)}
               />
               <div className="composer-actions">
-                <span className="composer-hint">Tip: mention your market, cash situation, team size, pricing, or any big concern.</span>
+                <span className="composer-hint">
+                  {chatTargetAgentName
+                    ? `Your next message will focus on ${agentMeta[chatTargetAgentName]?.label ?? "that advisor"}.`
+                    : "Tip: mention your market, cash situation, team size, pricing, or any big concern."}
+                </span>
                 <button type="submit" className="primary-action" disabled={loading || chatDraft.trim().length < 20}>
                   {loading ? "Reviewing your message..." : "Send to advisors"}
                 </button>
@@ -460,34 +499,6 @@ function SimulationView({
         </aside>
       </main>
 
-      <div className="hud-bar">
-        <div className="hud-item">
-          <span className="material-symbols-outlined">check_circle</span>
-          <div>
-            <span>System state</span>
-            <strong>{loading ? "Review in progress" : result ? "Results ready" : "Ready for a case"}</strong>
-          </div>
-        </div>
-        <div className="hud-divider" />
-        <div className="hud-item">
-          <span className="material-symbols-outlined">hourglass_top</span>
-          <div>
-            <span>Current work</span>
-            <strong>
-              {loading
-                ? "Advisors are reviewing"
-                : conversationAgentName
-                  ? `${activeConversationMeta?.label ?? "Advisor"} selected`
-                  : "Waiting for input"}
-            </strong>
-          </div>
-        </div>
-        <div className="hud-divider" />
-        <button type="button" className="hud-input" onClick={onToggleConsole}>
-          <span className="material-symbols-outlined">terminal</span>
-          Enter business case...
-        </button>
-      </div>
     </>
   );
 }
