@@ -97,52 +97,82 @@ function App() {
 
     try {
       setResult(createEmptyResult(payload.company_name));
-
-      const response = await fetch(`${API_BASE}/analyze/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error("Streaming response body is unavailable.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines.map((entry) => entry.trim()).filter(Boolean)) {
-          const payloadLine = JSON.parse(line);
-          if (payloadLine.type === "error") {
-            throw new Error(payloadLine.error || "Unknown streaming error.");
-          }
-          if (payloadLine.type === "final") {
-            setResult(payloadLine.result);
-            continue;
-          }
-          setResult((current) => mergeStreamEvent(current ?? createEmptyResult(payload.company_name), payloadLine));
-        }
+      try {
+        await runStreamingAnalysis(payload);
+      } catch (streamError) {
+        console.warn("Streaming analysis failed, falling back to regular analysis.", streamError);
+        setResult(createEmptyResult(payload.company_name));
+        await wait(800);
+        await runRegularAnalysis(payload);
       }
     } catch (submissionError) {
-      setError(submissionError.message || "Unable to analyze the business problem.");
+      const rawMessage = submissionError?.message || "Unable to analyze the business problem.";
+      const friendlyMessage =
+        /failed to fetch|networkerror|load failed|unable to connect/i.test(rawMessage)
+          ? "We could not reach the advisory service just now. Please wait a few seconds and try again."
+          : rawMessage;
+      setError(friendlyMessage);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runStreamingAnalysis(payload) {
+    const response = await fetch(`${API_BASE}/analyze/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error("Streaming response body is unavailable.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines.map((entry) => entry.trim()).filter(Boolean)) {
+        const payloadLine = JSON.parse(line);
+        if (payloadLine.type === "error") {
+          throw new Error(payloadLine.error || "Unknown streaming error.");
+        }
+        if (payloadLine.type === "final") {
+          setResult(payloadLine.result);
+          continue;
+        }
+        setResult((current) => mergeStreamEvent(current ?? createEmptyResult(payload.company_name), payloadLine));
+      }
+    }
+  }
+
+  async function runRegularAnalysis(payload) {
+    const response = await fetch(`${API_BASE}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    const nextResult = await response.json();
+    setResult(nextResult);
   }
 
   async function handleSubmit(event) {
@@ -1092,6 +1122,12 @@ function numericValue(value) {
 
 function compactObject(object) {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 }
 
 function mergeStreamEvent(current, eventPayload) {
