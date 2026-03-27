@@ -70,7 +70,7 @@ class BrightDataClient:
         self.zone = os.getenv("BRIGHTDATA_ZONE", "")
         self.country = os.getenv("BRIGHTDATA_COUNTRY", "us")
         self.timeout = float(os.getenv("BRIGHTDATA_TIMEOUT", "4"))
-        self.response_format = os.getenv("BRIGHTDATA_RESPONSE_FORMAT", "").strip()
+        self.response_format = os.getenv("BRIGHTDATA_RESPONSE_FORMAT", "json").strip() or "json"
 
     def is_configured(self) -> bool:
         return bool(self.api_key and self.endpoint and self.zone)
@@ -147,6 +147,7 @@ class BrightDataClient:
         except json.JSONDecodeError:
             body = {"content": raw_body}
 
+        body = self._normalize_payload(body)
         hits = self._extract_hits(body, topic=topic, query=query)
         return hits[:3]
 
@@ -159,6 +160,7 @@ class BrightDataClient:
                 item.get("title")
                 or item.get("name")
                 or item.get("headline")
+                or item.get("question")
                 or item.get("result_title")
                 or item.get("link_text")
             )
@@ -229,6 +231,7 @@ class BrightDataClient:
             "title",
             "name",
             "headline",
+            "question",
             "snippet",
             "description",
             "body",
@@ -240,6 +243,24 @@ class BrightDataClient:
             "href",
         }
         return any(key in item for key in candidate_keys)
+
+    def _normalize_payload(self, payload):
+        if not isinstance(payload, dict):
+            return payload
+
+        nested_body = payload.get("body")
+        if isinstance(nested_body, (dict, list)):
+            return nested_body
+
+        if isinstance(nested_body, str):
+            stripped = nested_body.strip()
+            if stripped.startswith("{") or stripped.startswith("["):
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+
+        return payload
 
     def _extract_hits_from_html(self, raw_html: str, topic: str, query: str) -> List[BrightDataHit]:
         title_matches = re.findall(r"<h3[^>]*>(.*?)</h3>", raw_html, flags=re.IGNORECASE | re.DOTALL)
