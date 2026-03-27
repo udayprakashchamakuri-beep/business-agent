@@ -165,3 +165,7 @@ The system validates that it is:
 - using memory
 
 Those results appear in the final response under `validation`.
+
+GitHub Pages note:
+
+- after enabling `Source = GitHub Actions`, the next push or workflow rerun will publish the frontend to the Pages URL
