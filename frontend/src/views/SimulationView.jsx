@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
-import { buildDirectAdvisorReply, buildRoundSummary, formatDecisionLabel, toPlainText } from "../plainLanguage";
+import {
+  buildDirectAdvisorReply,
+  buildRoundSummary,
+  formatAdvisorStanceLabel,
+  formatDecisionLabel,
+  shouldShowAdvisorStanceBadge,
+  toPlainText,
+} from "../plainLanguage";
 
 function SimulationView({
   agentMeta,
@@ -63,6 +70,7 @@ function SimulationView({
   const selectedAdvisorLabels = conversationAgentNames.map((name) => agentMeta[name]?.label ?? name);
   const chatTargetLabels = focusedAgentNames.map((name) => agentMeta[name]?.label ?? name);
   const showingFocusedReplies = conversationAgentNames.length > 0;
+  const shouldShowFocusedReplyBadge = shouldShowAdvisorStanceBadge(latestUserMessage?.content ?? "");
 
   useEffect(() => {
     if (!conversationEndRef.current) {
@@ -304,9 +312,11 @@ function SimulationView({
                           <div className={turn.stance === "NO GO" ? "message-bubble danger" : "message-bubble"}>
                             {buildDirectAdvisorReply(turn, latestUserMessage?.content ?? "")}
                           </div>
-                          <div className="message-tags">
-                            <span className={`message-tag ${stanceClassName}`}>{formatDecisionLabel(turn.stance)}</span>
-                          </div>
+                          {shouldShowFocusedReplyBadge ? (
+                            <div className="message-tags">
+                              <span className={`message-tag ${stanceClassName}`}>{formatAdvisorStanceLabel(turn.stance)}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </article>
                     );

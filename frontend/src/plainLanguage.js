@@ -30,6 +30,12 @@ const DECISION_LABELS = {
   "NO GO": "Do not launch yet",
 };
 
+const ADVISOR_BADGE_LABELS = {
+  GO: "Positive",
+  MODIFY: "Needs changes",
+  "NO GO": "Cautious",
+};
+
 export function toPlainText(value) {
   if (!value || typeof value !== "string") {
     return value ?? "";
@@ -63,6 +69,7 @@ export function buildDirectAdvisorReply(turn, question = "") {
   }
 
   const intent = inferQuestionIntent(question);
+  const isDecisionQuestion = shouldShowAdvisorStanceBadge(question);
   const stanceLine = buildStanceLine(turn);
   const metricLine = buildMetricLine(turn, intent);
   const actions = (turn.key_points ?? []).map((item) => toPlainText(item)).filter(Boolean);
@@ -73,10 +80,25 @@ export function buildDirectAdvisorReply(turn, question = "") {
     return [metricLine, supportingLine, cautionLine].filter(Boolean).join(" ");
   }
 
-  return [stanceLine, metricLine, supportingLine, cautionLine].filter(Boolean).join(" ");
+  if (isDecisionQuestion) {
+    return [stanceLine, metricLine, supportingLine, cautionLine].filter(Boolean).join(" ");
+  }
+
+  return [metricLine, supportingLine, cautionLine].filter(Boolean).join(" ") || supportingLine || cautionLine || metricLine;
 }
 
-function inferQuestionIntent(question) {
+export function shouldShowAdvisorStanceBadge(question = "") {
+  const lower = String(question).toLowerCase();
+  return /\bshould\b|\bshould we\b|\bdo you recommend\b|\brecommend\b|\bapprove\b|\bgo ahead\b|\blaunch\b|\bmove ahead\b|\bproceed\b|\bdecide\b|\bdecision\b|\bworth it\b/.test(
+    lower,
+  );
+}
+
+export function formatAdvisorStanceLabel(value) {
+  return ADVISOR_BADGE_LABELS[value] ?? formatDecisionLabel(value);
+}
+
+export function inferQuestionIntent(question) {
   const lower = String(question).toLowerCase();
 
   return {
