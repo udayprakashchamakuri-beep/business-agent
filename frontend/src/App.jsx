@@ -27,13 +27,15 @@ function App() {
       return undefined;
     }
 
-    const names = Object.keys(AGENT_META);
+    const names = focusedAgentNames.length ? focusedAgentNames : Object.keys(AGENT_META);
     const timer = window.setInterval(() => {
       setTypingIndex((current) => (current + 1) % names.length);
     }, 550);
 
     return () => window.clearInterval(timer);
-  }, [loading]);
+  }, [loading, focusedAgentNames]);
+
+  const availableTypingAgents = focusedAgentNames.length ? focusedAgentNames : Object.keys(AGENT_META);
 
   const groupedConversation = useMemo(() => {
     const grouped = new Map();
@@ -48,7 +50,7 @@ function App() {
 
   const conversation = result?.conversation ?? [];
   const timeline = result?.round_summaries?.length ? result.round_summaries : defaultTimeline;
-  const activeTypingAgent = Object.keys(AGENT_META)[typingIndex];
+  const activeTypingAgent = availableTypingAgents[typingIndex % availableTypingAgents.length];
   const lastTurn = conversation[conversation.length - 1] ?? null;
   const speakingAgent = loading ? activeTypingAgent : lastTurn?.agent_name ?? "CEO Agent";
   const displayedRounds = result?.round_summaries?.length || 3;
@@ -984,6 +986,7 @@ function buildAnalysisPayload(form, chatMessages = []) {
     industry: normalizedForm.industry,
     region: normalizedForm.region,
     company_stage: normalizedForm.company_stage,
+    selected_agent_names: chatMessages[chatMessages.length - 1]?.targetAgentNames ?? [],
     business_problem: composeBusinessProblem(normalizedForm, chatMessages),
     objectives: splitList(normalizedForm.objectives),
     current_constraints: splitList(normalizedForm.current_constraints),

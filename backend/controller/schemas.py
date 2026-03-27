@@ -25,6 +25,7 @@ class AnalyzeRequest(BaseModel):
     industry: Optional[str] = None
     region: Optional[str] = None
     company_stage: str = Field(default="Seed")
+    selected_agent_names: List[str] = Field(default_factory=list)
     business_problem: str = Field(
         ...,
         min_length=20,

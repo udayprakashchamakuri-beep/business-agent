@@ -21,7 +21,9 @@ from backend.memory.manager import MemoryManager
 class EnterpriseOrchestrator:
     def __init__(self) -> None:
         self.agent_definitions = list(build_agent_definitions().values())
+        self.agent_definitions_by_name = {definition.name: definition for definition in self.agent_definitions}
         self.agents = build_agent_roster()
+        self.agents_by_name = {agent.profile.definition.name: agent for agent in self.agents}
         self.decision_engine = DecisionEngine()
         self.action_engine = ActionEngine()
         self.explainability_engine = ExplainabilityEngine()
@@ -43,21 +45,23 @@ class EnterpriseOrchestrator:
     ) -> AnalyzeResponse:
         self._emit(event_handler, {"type": "analysis_started", "company_name": request.company_name})
 
+        active_agents = self._resolve_agents(request.selected_agent_names)
+        active_definitions = [agent.profile.definition for agent in active_agents]
         memory = MemoryManager(request)
-        debate_engine = DebateEngine(agents=self.agents, memory=memory)
+        debate_engine = DebateEngine(agents=active_agents, memory=memory)
         debate_result = debate_engine.run(
             request,
             event_handler=event_handler,
         )
         final_output = self.decision_engine.decide(
-            agents=self.agents,
+            agents=active_agents,
             conversation=debate_result.conversation,
             round_summaries=debate_result.round_summaries,
             conflicts=debate_result.conflicts,
         )
         latest_turns = self._latest_turns(debate_result.conversation)
         explainability = self.explainability_engine.build(
-            agents=self.agents,
+            agents=active_agents,
             conversation=debate_result.conversation,
             conflicts=debate_result.conflicts,
             final_decision=final_output.decision,
@@ -85,6 +89,7 @@ class EnterpriseOrchestrator:
             base_result=debate_result,
             base_decision=final_output.decision,
             base_explainability_top=explainability.top_influencer,
+            active_agents=active_agents,
             event_handler=event_handler,
         )
         validation = self._build_validation(
@@ -97,7 +102,7 @@ class EnterpriseOrchestrator:
 
         response = AnalyzeResponse(
             company_name=request.company_name,
-            agent_definitions=self.agent_definitions,
+            agent_definitions=active_definitions,
             conversation=debate_result.conversation,
             round_summaries=debate_result.round_summaries,
             conflicts=debate_result.conflicts,
@@ -125,6 +130,7 @@ class EnterpriseOrchestrator:
         base_result: DebateResult,
         base_decision: str,
         base_explainability_top: str,
+        active_agents,
         event_handler: Optional[Callable[[Dict[str, object]], None]] = None,
     ) -> List[ScenarioOutcome]:
         scenario_results: List[ScenarioOutcome] = []
@@ -142,16 +148,16 @@ class EnterpriseOrchestrator:
                 },
             )
             memory = MemoryManager(scenario_request)
-            debate_engine = DebateEngine(agents=self.agents, memory=memory)
+            debate_engine = DebateEngine(agents=active_agents, memory=memory)
             scenario_debate = debate_engine.run(scenario_request)
             scenario_final = self.decision_engine.decide(
-                agents=self.agents,
+                agents=active_agents,
                 conversation=scenario_debate.conversation,
                 round_summaries=scenario_debate.round_summaries,
                 conflicts=scenario_debate.conflicts,
             )
             scenario_explainability = self.explainability_engine.build(
-                agents=self.agents,
+                agents=active_agents,
                 conversation=scenario_debate.conversation,
                 conflicts=scenario_debate.conflicts,
                 final_decision=scenario_final.decision,
@@ -313,3 +319,9 @@ class EnterpriseOrchestrator:
     def _emit(self, event_handler: Optional[Callable[[Dict[str, object]], None]], payload: Dict[str, object]) -> None:
         if event_handler:
             event_handler(payload)
+
+    def _resolve_agents(self, selected_agent_names: Iterable[str]):
+        normalized_names = [name for name in selected_agent_names if name in self.agents_by_name]
+        if not normalized_names:
+            return self.agents
+        return [self.agents_by_name[name] for name in normalized_names]
