@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import CommandConsoleDrawer from "./components/CommandConsoleDrawer";
-import { AGENT_META, API_BASE, NAV_ITEMS, defaultTimeline, sampleProblem } from "./dashboardData";
+import { AGENT_META, API_BASE, DEMO_CASES, NAV_ITEMS, defaultTimeline } from "./dashboardData";
 import { formatDecisionLabel, toPlainText } from "./plainLanguage";
 import AgentsView from "./views/AgentsView";
 import IntelligenceView from "./views/IntelligenceView";
@@ -18,6 +18,7 @@ function App() {
   const [typingIndex, setTypingIndex] = useState(0);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [selectedDemoCaseId, setSelectedDemoCaseId] = useState(DEMO_CASES[0]?.id ?? "");
   const [selectedAgentName, setSelectedAgentName] = useState("CEO Agent");
   const [focusedAgentNames, setFocusedAgentNames] = useState([]);
   const [utilityPanel, setUtilityPanel] = useState("");
@@ -215,8 +216,9 @@ function App() {
     });
   }
 
-  function applySample() {
-    const sampleForm = buildSampleForm();
+  function applySample(sampleId = selectedDemoCaseId) {
+    const sampleForm = buildSampleForm(sampleId);
+    setSelectedDemoCaseId(sampleId);
     setForm(sampleForm);
     setChatDraft(sampleForm.business_problem);
     setChatMessages([createChatMessage(sampleForm.business_problem)]);
@@ -435,11 +437,14 @@ function App() {
       <CommandConsoleDrawer
         consoleOpen={consoleOpen}
         form={form}
+        demoCases={DEMO_CASES}
+        selectedDemoCaseId={selectedDemoCaseId}
         loading={loading}
         error={error}
         onClose={() => setConsoleOpen(false)}
         onSubmit={handleSubmit}
         onApplySample={applySample}
+        onSelectDemoCase={setSelectedDemoCaseId}
         onFieldChange={updateFormField}
       />
 
@@ -1184,26 +1189,10 @@ function buildDefaultForm() {
   };
 }
 
-function buildSampleForm() {
+function buildSampleForm(sampleId) {
+  const selectedCase = DEMO_CASES.find((item) => item.id === sampleId) ?? DEMO_CASES[0];
   return {
-    company_name: "HelixOps AI",
-    industry: "Business software",
-    region: "North America",
-    company_stage: "Seed",
-    business_problem: sampleProblem,
-    objectives: "Check whether healthcare expansion makes sense, protect cash, create a realistic launch plan",
-    current_constraints: "11 months of cash left, compliance complexity, small sales team, limited delivery capacity",
-    extra_context: "",
-    runway_months: "11",
-    gross_margin: "68",
-    cac_payback_months: "15",
-    price_point: "28000",
-    variation_name: "Healthcare downside case",
-    variation_budget_change_pct: "-20",
-    variation_market_condition: "bearish",
-    variation_competition_level: "high",
-    variation_pricing_change_pct: "-10",
-    variation_notes: "Test the plan with smaller budgets and stronger competitors.",
+    ...selectedCase.form,
   };
 }
 

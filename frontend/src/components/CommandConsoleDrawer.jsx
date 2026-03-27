@@ -20,11 +20,14 @@ const REGION_OPTIONS = [
 function CommandConsoleDrawer({
   consoleOpen,
   form,
+  demoCases,
+  selectedDemoCaseId,
   loading,
   error,
   onClose,
   onSubmit,
   onApplySample,
+  onSelectDemoCase,
   onFieldChange,
 }) {
   return (
@@ -45,6 +48,34 @@ function CommandConsoleDrawer({
         </div>
 
         <form className="console-form" onSubmit={onSubmit}>
+          <div className="form-section-heading">
+            <h3>Try a demo case</h3>
+            <p>Pick a ready-made business case if you want to test the analysis quickly.</p>
+          </div>
+
+          <div className="console-grid two">
+            <label>
+              Demo case
+              <select value={selectedDemoCaseId} onChange={(event) => onSelectDemoCase(event.target.value)}>
+                {demoCases.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <span className="field-help">
+                {demoCases.find((item) => item.id === selectedDemoCaseId)?.summary ?? "Choose an example case to load."}
+              </span>
+            </label>
+            <label className="demo-case-action">
+              Load selected case
+              <button type="button" className="secondary-action wide-secondary" onClick={() => onApplySample(selectedDemoCaseId)}>
+                Use this demo case
+              </button>
+              <span className="field-help">This will fill the form with realistic demo data you can edit before running the analysis.</span>
+            </label>
+          </div>
+
           <div className="form-section-heading">
             <h3>1. Basic business details</h3>
             <p>Choose the options that are closest to your current situation.</p>
@@ -276,8 +307,8 @@ function CommandConsoleDrawer({
           {error ? <p className="console-error">{error}</p> : null}
 
           <div className="console-actions">
-            <button type="button" className="secondary-action" onClick={onApplySample}>
-              Use example
+            <button type="button" className="secondary-action" onClick={() => onApplySample(selectedDemoCaseId)}>
+              Load demo case
             </button>
             <button type="submit" className="primary-action" disabled={loading}>
               {loading ? "Reviewing your case..." : "Start analysis"}
