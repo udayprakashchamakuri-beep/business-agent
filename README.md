@@ -70,16 +70,24 @@ Create `backend/.env` from `backend/.env.example` and set:
 
 ```env
 FEATHERLESS_API_KEY=your_featherless_key
-FEATHERLESS_MODEL=your_featherless_model
+FEATHERLESS_MODEL=Qwen/Qwen2.5-7B-Instruct
 FEATHERLESS_BASE_URL=https://api.featherless.ai/v1
 
 BRIGHTDATA_API_KEY=your_brightdata_key
-BRIGHTDATA_API_ENDPOINT=https://your-brightdata-endpoint
+BRIGHTDATA_API_ENDPOINT=https://api.brightdata.com/request
+BRIGHTDATA_ZONE=your_brightdata_zone
+BRIGHTDATA_COUNTRY=us
 
 FRONTEND_ORIGIN=https://udayprakashchamakuri-beep.github.io
 ```
 
 If those variables are not present, the simulator still works using the internal reasoning engine.
+
+Bright Data note:
+
+- the API key alone is not enough
+- you also need the Bright Data `zone` name for the product you want to use
+- until `BRIGHTDATA_ZONE` is set, the simulator will safely skip Bright Data grounding and continue with internal reasoning
 
 ## Run Locally
 

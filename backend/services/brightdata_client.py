@@ -6,21 +6,30 @@ from typing import List
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from backend.config.env import load_local_env
+
 
 class BrightDataClient:
     def __init__(self) -> None:
+        load_local_env()
         self.api_key = os.getenv("BRIGHTDATA_API_KEY", "")
-        self.endpoint = os.getenv("BRIGHTDATA_API_ENDPOINT", "")
+        self.endpoint = os.getenv("BRIGHTDATA_API_ENDPOINT", "https://api.brightdata.com/request")
+        self.zone = os.getenv("BRIGHTDATA_ZONE", "")
+        self.country = os.getenv("BRIGHTDATA_COUNTRY", "us")
         self.timeout = float(os.getenv("BRIGHTDATA_TIMEOUT", "30"))
 
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.endpoint)
+        return bool(self.api_key and self.endpoint and self.zone)
 
     def fetch_market_context(self, query: str) -> List[str]:
         if not self.is_configured():
             return []
 
-        payload = {"query": query, "limit": 3}
+        payload = {
+            "zone": self.zone,
+            "url": f"https://www.google.com/search?q={query.replace(' ', '+')}&gl={self.country}",
+            "format": "raw",
+        }
         request = Request(
             url=self.endpoint,
             data=json.dumps(payload).encode("utf-8"),
@@ -33,9 +42,14 @@ class BrightDataClient:
 
         try:
             with urlopen(request, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+                raw_body = response.read().decode("utf-8", errors="ignore")
+        except (HTTPError, URLError, TimeoutError):
             return []
+
+        try:
+            body = json.loads(raw_body)
+        except json.JSONDecodeError:
+            body = {"content": raw_body}
 
         snippets = self._extract_snippets(body)
         return snippets[:3]

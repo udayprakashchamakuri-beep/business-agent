@@ -6,9 +6,12 @@ from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from backend.config.env import load_local_env
+
 
 class FeatherlessClient:
     def __init__(self) -> None:
+        load_local_env()
         self.api_key = os.getenv("FEATHERLESS_API_KEY", "")
         self.model = os.getenv("FEATHERLESS_MODEL", "")
         self.base_url = os.getenv("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1").rstrip("/")

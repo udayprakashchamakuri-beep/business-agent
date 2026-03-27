@@ -9,8 +9,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from backend.config.env import load_local_env
 from backend.controller.orchestrator import EnterpriseOrchestrator
 from backend.controller.schemas import AnalyzeRequest, AnalyzeResponse
+
+load_local_env()
 
 app = FastAPI(
     title="Autonomous AI Enterprise Simulator",
