@@ -12,6 +12,11 @@ function SimulationView({
   scenarioTitle,
   highestRisk,
   recommendedDirective,
+  actionPlan,
+  explainability,
+  memorySummary,
+  scenarioResults,
+  validation,
   onToggleConsole,
   onApplySample,
 }) {
@@ -60,8 +65,8 @@ function SimulationView({
           <div className="sidebar-module">
             <div className="module-label">Command Intake</div>
             <p>
-              Feed the simulator a live business problem, constraints, and metrics. The board will turn that into a
-              directive.
+              Feed the simulator a live business problem, constraints, metrics, and what-if scenario. The board will
+              turn that into a directive plus an execution plan.
             </p>
             <div className="module-actions">
               <button type="button" className="secondary-action" onClick={onApplySample}>
@@ -88,7 +93,10 @@ function SimulationView({
                 Round {currentRound || 0} / {displayedRounds}
               </span>
               <div className="meter-track">
-                <div className="meter-fill" style={{ width: `${Math.max(8, ((currentRound || 1) / displayedRounds) * 100)}%` }} />
+                <div
+                  className="meter-fill"
+                  style={{ width: `${Math.max(8, ((currentRound || 1) / displayedRounds) * 100)}%` }}
+                />
               </div>
             </div>
           </header>
@@ -235,31 +243,67 @@ function SimulationView({
           </section>
 
           <section className="health-panel">
-            <h3>Simulation Health</h3>
-            <div className="health-row">
-              <div>
-                <span>GPU Cluster Load</span>
-                <strong>{loading ? "71%" : result ? "42%" : "Idle"}</strong>
+            <h3>Action Engine</h3>
+            <div className="execution-list">
+              {(actionPlan?.execution_plan ?? []).slice(0, 4).map((step, index) => (
+                <div key={`${step.owner}-${index}`} className="execution-item">
+                  <strong>{step.timeline}</strong>
+                  <div>
+                    <p>{step.step}</p>
+                    <span>
+                      {step.owner} · {step.success_metric}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {!actionPlan?.execution_plan?.length ? (
+                <p className="compact-placeholder">Execution steps appear once the CEO issues a directive.</p>
+              ) : null}
+            </div>
+            <div className="scenario-grid">
+              {(scenarioResults ?? []).map((scenario) => (
+                <article key={scenario.scenario} className="scenario-card">
+                  <div className="scenario-card-top">
+                    <strong>{scenario.scenario}</strong>
+                    <span>{scenario.decision}</span>
+                  </div>
+                  <p>{scenario.difference_from_base}</p>
+                  <small>{scenario.reasoning_shift?.[0] ?? "Reasoning remained directionally stable."}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="health-panel">
+            <h3>Explainability & Memory</h3>
+            <div className="health-block">
+              <div className="health-meta">
+                <span>Top Influencer</span>
+                <span>{explainability?.top_influencer ?? "Pending"}</span>
               </div>
-              <div className="micro-bars">
-                <div />
-                <div />
-                <div />
-                <div />
-                <div />
-              </div>
+              <p className="insight-paragraph">
+                {explainability?.final_reasoning_summary ?? "The board will summarize why the verdict landed where it did."}
+              </p>
             </div>
             <div className="health-block">
               <div className="health-meta">
-                <span>Convergence Rate</span>
-                <span>{result ? "Optimal" : loading ? "Forming" : "Standby"}</span>
+                <span>Recalled Simulations</span>
+                <span>{memorySummary?.recalled_simulations ?? 0}</span>
               </div>
-              <div className="micro-track">
-                <div />
-                <div />
-                <div />
-                <div />
-                <div className="dim" />
+              <p className="insight-paragraph">
+                {memorySummary?.prior_failures?.[0] ?? "Persistent memory is ready to store and recall prior board outcomes."}
+              </p>
+            </div>
+            <div className="health-block">
+              <div className="health-meta">
+                <span>Validation Check</span>
+                <span>{validation?.passed ? "PASS" : loading ? "RUNNING" : "PENDING"}</span>
+              </div>
+              <div className="validation-grid">
+                <ValidationPill label="Decisions" ok={validation?.decisions_made} />
+                <ValidationPill label="Scenarios" ok={validation?.multiple_scenarios_simulated} />
+                <ValidationPill label="Actions" ok={validation?.actions_generated} />
+                <ValidationPill label="Memory" ok={validation?.memory_used} />
               </div>
             </div>
             <div className="health-block">
@@ -270,11 +314,13 @@ function SimulationView({
               <div className="conflict-compact-list">
                 {(result?.conflicts ?? []).slice(0, 3).map((conflict, index) => (
                   <div key={`${conflict.topic}-${index}`} className="conflict-compact-item">
-                    <strong>R{conflict.round}</strong>
+                    <strong>{conflict.conflict_type}</strong>
                     <p>{conflict.description}</p>
                   </div>
                 ))}
-                {!result?.conflicts?.length ? <p className="compact-placeholder">Contradictions appear here after debate begins.</p> : null}
+                {!result?.conflicts?.length ? (
+                  <p className="compact-placeholder">Contradictions appear here after debate begins.</p>
+                ) : null}
               </div>
             </div>
           </section>
@@ -294,7 +340,7 @@ function SimulationView({
           <span className="material-symbols-outlined">database</span>
           <div>
             <span>Dataset</span>
-            <strong>{result ? "LIVE_BOARD_V1" : "OBSIDIAN_V4"}</strong>
+            <strong>{result ? "LIVE_BOARD_V2" : "OBSIDIAN_V4"}</strong>
           </div>
         </div>
         <div className="hud-divider" />
@@ -328,6 +374,10 @@ function InsightCard({ icon, accent, title, body, kicker }) {
       <p>{body}</p>
     </article>
   );
+}
+
+function ValidationPill({ label, ok }) {
+  return <span className={ok ? "validation-pill ok" : "validation-pill"}>{label}</span>;
 }
 
 export default SimulationView;

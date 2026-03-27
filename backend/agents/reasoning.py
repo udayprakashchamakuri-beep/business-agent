@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from statistics import mean
@@ -7,6 +8,8 @@ from typing import Dict, Iterable, List, Tuple
 
 from backend.agents.base import AgentProfile
 from backend.controller.schemas import AgentTurn, AnalyzeRequest, ConflictRecord, DecisionStatus, RoundSummary
+from backend.services.brightdata_client import BrightDataClient
+from backend.services.featherless_client import FeatherlessClient
 
 
 @dataclass
@@ -33,6 +36,7 @@ class BusinessSignals:
     sales_friction: int
     differentiation_pressure: int
     numeric_metrics: Dict[str, float]
+    derived_metrics: Dict[str, float]
     evidence: List[str]
 
     def snapshot(self) -> Dict[str, int]:
@@ -50,10 +54,20 @@ class BusinessSignals:
 
 
 class StrategicReasoner:
+    def __init__(self) -> None:
+        self.signal_cache: Dict[str, BusinessSignals] = {}
+        self.featherless_client = FeatherlessClient()
+        self.brightdata_client = BrightDataClient()
+
     def analyze_request(self, request: AnalyzeRequest) -> BusinessSignals:
+        cache_key = json.dumps(request.model_dump(mode="json"), sort_keys=True)
+        if cache_key in self.signal_cache:
+            return self.signal_cache[cache_key]
+
         problem = " ".join(
             [
                 request.business_problem,
+                request.scenario_name,
                 request.company_name,
                 request.industry or "",
                 request.region or "",
@@ -142,6 +156,9 @@ class StrategicReasoner:
         gross_margin = numeric_metrics.get("gross_margin")
         cac_payback = numeric_metrics.get("cac_payback_months")
         price_point = numeric_metrics.get("price_point")
+        budget_change_pct = numeric_metrics.get("scenario_budget_change_pct", 0.0)
+        market_condition = str(request.known_metrics.get("scenario_market_condition", "base")).lower()
+        competition_level = str(request.known_metrics.get("scenario_competition_level", "medium")).lower()
 
         if runway is not None:
             if runway >= 18:
@@ -179,6 +196,40 @@ class StrategicReasoner:
                 growth_potential += 5
                 evidence.append(f"Low price point (${price_point:,.0f}) favors faster volume motion.")
 
+        if budget_change_pct:
+            if budget_change_pct <= -20:
+                financial_viability -= 12
+                growth_potential -= 5
+                evidence.append(f"Budget is down {abs(budget_change_pct):.0f}%, tightening the operating envelope.")
+            elif budget_change_pct < 0:
+                financial_viability -= 6
+                evidence.append(f"Budget is down {abs(budget_change_pct):.0f}%, reducing room for execution mistakes.")
+            elif budget_change_pct >= 15:
+                financial_viability += 6
+                growth_potential += 4
+                evidence.append(f"Budget is up {budget_change_pct:.0f}%, giving the board more room to sequence the plan.")
+
+        if market_condition == "bearish":
+            market_attractiveness -= 9
+            growth_potential -= 7
+            financial_viability -= 4
+            evidence.append("Bearish market condition applied, lowering demand confidence and increasing caution.")
+        elif market_condition == "bullish":
+            market_attractiveness += 9
+            growth_potential += 8
+            pricing_power += 4
+            evidence.append("Bullish market condition applied, improving demand and pricing confidence.")
+
+        if competition_level == "high":
+            differentiation_pressure += 14
+            pricing_power -= 7
+            sales_friction += 6
+            evidence.append("High competition scenario applied, increasing differentiation and conversion pressure.")
+        elif competition_level == "low":
+            differentiation_pressure -= 8
+            market_attractiveness += 4
+            evidence.append("Low competition scenario applied, improving whitespace and buyer attention.")
+
         if request.company_stage.lower() in {"pre-seed", "seed"}:
             financial_viability -= 4
             talent_load += 4
@@ -186,21 +237,61 @@ class StrategicReasoner:
             growth_potential += 6
             financial_viability += 4
 
-        return BusinessSignals(
+        external_evidence = self._fetch_external_evidence(request)
+        if external_evidence:
+            evidence.extend(external_evidence)
+            joined = " ".join(external_evidence).lower()
+            if any(keyword in joined for keyword in ["regulation", "compliance", "privacy", "lawsuit"]):
+                compliance_risk += 4
+            if any(keyword in joined for keyword in ["competition", "crowded", "incumbent", "price war"]):
+                differentiation_pressure += 5
+                pricing_power -= 3
+            if any(keyword in joined for keyword in ["growth", "expansion", "demand", "adoption", "spending"]):
+                market_attractiveness += 4
+                growth_potential += 3
+
+        market_attractiveness = self._clamp(market_attractiveness)
+        growth_potential = self._clamp(growth_potential)
+        financial_viability = self._clamp(financial_viability)
+        operational_complexity = self._clamp(operational_complexity)
+        compliance_risk = self._clamp(compliance_risk)
+        talent_load = self._clamp(talent_load)
+        pricing_power = self._clamp(pricing_power)
+        sales_friction = self._clamp(sales_friction)
+        differentiation_pressure = self._clamp(differentiation_pressure)
+
+        derived_metrics = self._derive_metrics(
+            request=request,
+            channel=channel,
+            market_attractiveness=market_attractiveness,
+            growth_potential=growth_potential,
+            financial_viability=financial_viability,
+            operational_complexity=operational_complexity,
+            compliance_risk=compliance_risk,
+            pricing_power=pricing_power,
+            sales_friction=sales_friction,
+            differentiation_pressure=differentiation_pressure,
+            numeric_metrics=numeric_metrics,
+        )
+
+        signals = BusinessSignals(
             channel=channel,
             business_model=business_model,
-            market_attractiveness=self._clamp(market_attractiveness),
-            growth_potential=self._clamp(growth_potential),
-            financial_viability=self._clamp(financial_viability),
-            operational_complexity=self._clamp(operational_complexity),
-            compliance_risk=self._clamp(compliance_risk),
-            talent_load=self._clamp(talent_load),
-            pricing_power=self._clamp(pricing_power),
-            sales_friction=self._clamp(sales_friction),
-            differentiation_pressure=self._clamp(differentiation_pressure),
+            market_attractiveness=market_attractiveness,
+            growth_potential=growth_potential,
+            financial_viability=financial_viability,
+            operational_complexity=operational_complexity,
+            compliance_risk=compliance_risk,
+            talent_load=talent_load,
+            pricing_power=pricing_power,
+            sales_friction=sales_friction,
+            differentiation_pressure=differentiation_pressure,
             numeric_metrics=numeric_metrics,
+            derived_metrics=derived_metrics,
             evidence=evidence,
         )
+        self.signal_cache[cache_key] = signals
+        return signals
 
     def generate_turn(
         self,
@@ -219,6 +310,9 @@ class StrategicReasoner:
         stance_score = profile.bias + mean(item.score for item in selected)
         stance, confidence = self._score_to_stance(stance_score, round_number)
         reference_names, challenged_agents = self._pick_references(profile, full_history, latest_turns, conflicts)
+        estimated_metrics = self._build_estimated_metrics(profile.definition.name, signals)
+        calculations = self._build_calculations(profile.definition.name, estimated_metrics)
+        memory_references = self._build_memory_references(agent_memory, request.scenario_name)
         message = self._compose_message(
             profile=profile,
             selected=selected,
@@ -228,6 +322,21 @@ class StrategicReasoner:
             reference_names=reference_names,
             challenged_agents=challenged_agents,
             round_summaries=round_summaries,
+            estimated_metrics=estimated_metrics,
+            calculations=calculations,
+            memory_references=memory_references,
+            scenario_name=request.scenario_name,
+        )
+        message = self._enhance_message_with_featherless(
+            profile=profile,
+            request=request,
+            round_number=round_number,
+            selected=selected,
+            estimated_metrics=estimated_metrics,
+            calculations=calculations,
+            references=reference_names,
+            memory_references=memory_references,
+            fallback_message=message,
         )
 
         policy_positions: Dict[str, str] = {}
@@ -244,6 +353,7 @@ class StrategicReasoner:
             agent_name=profile.definition.name,
             role=profile.definition.role,
             round=round_number,
+            scenario_name=request.scenario_name,
             message=message,
             stance=stance,
             confidence=confidence,
@@ -254,6 +364,9 @@ class StrategicReasoner:
             challenged_agents=challenged_agents,
             policy_positions=policy_positions,
             score_snapshot=signals.snapshot(),
+            estimated_metrics=estimated_metrics,
+            calculations=calculations,
+            memory_references=memory_references,
         )
 
     def _build_agent_insights(
@@ -617,6 +730,10 @@ class StrategicReasoner:
         reference_names: List[str],
         challenged_agents: List[str],
         round_summaries: List[RoundSummary],
+        estimated_metrics: Dict[str, float],
+        calculations: List[str],
+        memory_references: List[str],
+        scenario_name: str,
     ) -> str:
         opening = {
             "GO": "I support moving forward",
@@ -625,14 +742,27 @@ class StrategicReasoner:
         }[stance]
         evidence_sentence = " ".join(insight.text for insight in selected[:2])
         action_sentence = " ".join(insight.action for insight in selected[:2])
+        metric_sentence = (
+            f"Scenario {scenario_name} currently models ROI at {estimated_metrics.get('expected_roi_pct', 0):.1f}%, "
+            f"payback at {estimated_metrics.get('estimated_payback_months', 0):.1f} months, and a launch budget of "
+            f"${estimated_metrics.get('launch_budget', 0):,.0f}."
+        )
+        calculation_sentence = calculations[0] if calculations else ""
 
         if reference_names:
             if challenged_agents:
-                reference_sentence = f"I am explicitly pressuring {', '.join(challenged_agents)} to defend the assumptions they are carrying."
+                reference_sentence = (
+                    f"I am explicitly pressuring {', '.join(challenged_agents)} to defend the assumptions they are carrying."
+                )
             else:
                 reference_sentence = f"I am aligned with parts of {', '.join(reference_names)} but only if the evidence holds."
         else:
             reference_sentence = "I am treating this as a fresh decision with limited prior consensus."
+
+        if memory_references:
+            memory_sentence = memory_references[0]
+        else:
+            memory_sentence = "I am relying on the current board memory and prior round summaries rather than repeating opening claims."
 
         if round_summaries and round_number > 1:
             prior_tension = round_summaries[-1].conflict_points[0] if round_summaries[-1].conflict_points else "board alignment"
@@ -642,7 +772,8 @@ class StrategicReasoner:
 
         return (
             f"[{profile.definition.name} | Round {round_number}]: {opening} at {confidence}% confidence. "
-            f"{evidence_sentence} {reference_sentence} {action_sentence} {closing}"
+            f"{evidence_sentence} {metric_sentence} {calculation_sentence} {reference_sentence} "
+            f"{memory_sentence} {action_sentence} {closing}"
         )
 
     def _score_to_stance(self, stance_score: float, round_number: int) -> Tuple[DecisionStatus, int]:
@@ -690,6 +821,206 @@ class StrategicReasoner:
             return "software"
         return "service"
 
+    def _derive_metrics(
+        self,
+        request: AnalyzeRequest,
+        channel: str,
+        market_attractiveness: int,
+        growth_potential: int,
+        financial_viability: int,
+        operational_complexity: int,
+        compliance_risk: int,
+        pricing_power: int,
+        sales_friction: int,
+        differentiation_pressure: int,
+        numeric_metrics: Dict[str, float],
+    ) -> Dict[str, float]:
+        runway = numeric_metrics.get("runway_months", 12.0)
+        gross_margin_pct = numeric_metrics.get("gross_margin", 62.0)
+        price_point = numeric_metrics.get("price_point", 12999.0 if channel == "B2B" else 249.0)
+        budget_change_pct = numeric_metrics.get("scenario_budget_change_pct", 0.0)
+
+        if channel == "B2B":
+            expected_customers = max(
+                3,
+                round((market_attractiveness + growth_potential + pricing_power - sales_friction - compliance_risk) / 18),
+            )
+        else:
+            expected_customers = max(
+                40,
+                round((market_attractiveness + growth_potential + pricing_power - sales_friction) * 2.6),
+            )
+
+        win_rate_pct = self._clamp(18 + (market_attractiveness + pricing_power - sales_friction - differentiation_pressure) / 3, 8, 62)
+        monthly_leads = max(24, round(expected_customers / max(win_rate_pct / 100, 0.08)))
+        launch_budget = max(
+            24000.0,
+            price_point * (2.2 if channel == "B2B" else 40.0) * (1 + (operational_complexity + compliance_risk) / 250),
+        )
+        launch_budget *= 1 + (budget_change_pct / 100) * 0.5
+        monthly_revenue = (expected_customers * price_point) / 12
+        annual_revenue = expected_customers * price_point
+        gross_profit = annual_revenue * (gross_margin_pct / 100)
+        expected_roi_pct = ((gross_profit - launch_budget) / launch_budget) * 100
+        estimated_payback_months = launch_budget / max(monthly_revenue * (gross_margin_pct / 100), 1.0)
+        break_even_customers = max(1, round(launch_budget / max(price_point * (gross_margin_pct / 100), 1.0)))
+        burn_multiple = max(0.6, (launch_budget / max(monthly_revenue, 1.0)) / 3.0)
+        risk_adjusted_score = self._clamp(
+            financial_viability + market_attractiveness - compliance_risk - operational_complexity / 2,
+            5,
+            95,
+        )
+
+        return {
+            "expected_customers_12m": float(expected_customers),
+            "expected_win_rate_pct": float(win_rate_pct),
+            "monthly_leads_required": float(monthly_leads),
+            "launch_budget": round(launch_budget, 2),
+            "monthly_revenue_run_rate": round(monthly_revenue, 2),
+            "projected_annual_revenue": round(annual_revenue, 2),
+            "projected_gross_profit": round(gross_profit, 2),
+            "expected_roi_pct": round(expected_roi_pct, 2),
+            "estimated_payback_months": round(estimated_payback_months, 2),
+            "break_even_customers": float(break_even_customers),
+            "risk_adjusted_score": float(risk_adjusted_score),
+            "burn_multiple": round(burn_multiple, 2),
+            "runway_months": float(runway),
+            "gross_margin_pct": float(gross_margin_pct),
+            "price_point": round(price_point, 2),
+        }
+
+    def _build_estimated_metrics(self, agent_name: str, signals: BusinessSignals) -> Dict[str, float]:
+        metrics = dict(signals.derived_metrics)
+        if agent_name == "Finance Agent":
+            metrics["cash_buffer_months"] = round(max(0.0, metrics["runway_months"] - metrics["estimated_payback_months"]), 2)
+        elif agent_name == "Marketing Agent":
+            metrics["channel_efficiency_index"] = round(
+                max(0.0, signals.market_attractiveness + signals.pricing_power - signals.differentiation_pressure), 2
+            )
+        elif agent_name == "Sales Strategy Agent":
+            metrics["pipeline_value"] = round(
+                metrics["monthly_leads_required"] * metrics["price_point"] * max(metrics["expected_win_rate_pct"] / 100, 0.1),
+                2,
+            )
+        elif agent_name == "Risk Agent":
+            metrics["risk_penalty_pct"] = round(
+                max(5.0, (signals.compliance_risk + signals.operational_complexity) / 2.2),
+                2,
+            )
+        elif agent_name == "Hiring Agent":
+            metrics["critical_hires_required"] = float(2 if signals.talent_load < 65 else 3)
+        elif agent_name == "Supply Chain Agent":
+            metrics["fulfillment_stress_pct"] = round(
+                max(10.0, (signals.operational_complexity + signals.sales_friction) / 1.8),
+                2,
+            )
+        return metrics
+
+    def _build_calculations(self, agent_name: str, metrics: Dict[str, float]) -> List[str]:
+        calculations = [
+            (
+                "Modeled ROI = "
+                f"(${metrics.get('projected_gross_profit', 0):,.0f} gross profit - ${metrics.get('launch_budget', 0):,.0f} launch budget) "
+                f"/ ${metrics.get('launch_budget', 0):,.0f} = {metrics.get('expected_roi_pct', 0):.1f}%."
+            ),
+            (
+                "Estimated payback = "
+                f"${metrics.get('launch_budget', 0):,.0f} / (${metrics.get('monthly_revenue_run_rate', 0):,.0f} monthly revenue x "
+                f"{metrics.get('gross_margin_pct', 0):.0f}% gross margin) = {metrics.get('estimated_payback_months', 0):.1f} months."
+            ),
+        ]
+
+        if agent_name == "Finance Agent":
+            calculations.append(
+                "Cash buffer after modeled payback = "
+                f"{metrics.get('runway_months', 0):.1f} runway months - {metrics.get('estimated_payback_months', 0):.1f} payback months = "
+                f"{metrics.get('cash_buffer_months', 0):.1f} months."
+            )
+        elif agent_name == "Marketing Agent":
+            calculations.append(
+                "Channel efficiency index = "
+                f"{metrics.get('channel_efficiency_index', 0):.1f}, combining demand, pricing power, and differentiation pressure."
+            )
+        elif agent_name == "Risk Agent":
+            calculations.append(
+                "Risk penalty = "
+                f"{metrics.get('risk_penalty_pct', 0):.1f}% based on combined compliance and operating strain."
+            )
+        elif agent_name == "Hiring Agent":
+            calculations.append(
+                "Critical hiring plan assumes "
+                f"{metrics.get('critical_hires_required', 0):.0f} core hires before broader scale-up."
+            )
+
+        return calculations
+
+    def _build_memory_references(self, agent_memory: Dict[str, object], scenario_name: str) -> List[str]:
+        references: List[str] = []
+        past_failures = list(agent_memory.get("past_failures", []))
+        past_arguments = list(agent_memory.get("past_arguments", []))
+        prior_refs = list(agent_memory.get("memory_references", []))
+
+        if past_failures:
+            references.append(
+                f"Previously, similar simulations broke on '{past_failures[0]}', so I am tightening the recommendation in {scenario_name}."
+            )
+        if past_arguments:
+            references.append(
+                f"In earlier simulations, the board kept returning to '{past_arguments[0]}'; I am using that lesson instead of restarting the debate."
+            )
+        if prior_refs:
+            references.extend(prior_refs[:1])
+
+        return references[:2]
+
+    def _fetch_external_evidence(self, request: AnalyzeRequest) -> List[str]:
+        query_parts = [
+            request.company_name,
+            request.industry or "",
+            request.region or "",
+            request.business_problem,
+        ]
+        query = " ".join(part for part in query_parts if part).strip()
+        if not query:
+            return []
+
+        snippets = self.brightdata_client.fetch_market_context(query)
+        return [f"Bright Data signal: {snippet}" for snippet in snippets]
+
+    def _enhance_message_with_featherless(
+        self,
+        profile: AgentProfile,
+        request: AnalyzeRequest,
+        round_number: int,
+        selected: List[Insight],
+        estimated_metrics: Dict[str, float],
+        calculations: List[str],
+        references: List[str],
+        memory_references: List[str],
+        fallback_message: str,
+    ) -> str:
+        if not self.featherless_client.is_configured():
+            return fallback_message
+
+        prompt = (
+            f"Rewrite the following executive board turn into a sharper boardroom message while preserving the same stance and numbers. "
+            f"Return one concise paragraph beginning with '[{profile.definition.name} | Round {round_number}]'.\n\n"
+            f"Scenario: {request.scenario_name}\n"
+            f"Role: {profile.definition.role}\n"
+            f"Key arguments: {' '.join(insight.text for insight in selected[:2])}\n"
+            f"Actions: {' '.join(insight.action for insight in selected[:2])}\n"
+            f"Estimated metrics: {json.dumps(estimated_metrics, sort_keys=True)}\n"
+            f"Calculations: {' '.join(calculations[:2])}\n"
+            f"Referenced agents: {', '.join(references) if references else 'none'}\n"
+            f"Memory references: {' '.join(memory_references) if memory_references else 'none'}\n"
+            f"Fallback message: {fallback_message}"
+        )
+        return self.featherless_client.generate_boardroom_message(
+            system_prompt=profile.definition.system_prompt,
+            prompt=prompt,
+            fallback=fallback_message,
+        )
+
     def _extract_numeric_metrics(self, text: str, known_metrics: Dict[str, object]) -> Dict[str, float]:
         metrics: Dict[str, float] = {}
         normalized = {key.lower(): value for key, value in known_metrics.items()}
@@ -698,6 +1029,7 @@ class StrategicReasoner:
             "gross_margin": ["gross_margin", "gross margin"],
             "cac_payback_months": ["cac_payback", "cac payback", "payback"],
             "price_point": ["price", "pricing", "price_point", "acv", "arr per customer"],
+            "scenario_budget_change_pct": ["scenario_budget_change_pct", "budget_change_pct"],
         }
         for target, names in aliases.items():
             for name in names:

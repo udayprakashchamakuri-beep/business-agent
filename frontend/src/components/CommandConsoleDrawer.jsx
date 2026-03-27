@@ -87,6 +87,60 @@ function CommandConsoleDrawer({
             </label>
           </div>
 
+          <div className="console-divider">
+            <span>What-If Scenario</span>
+          </div>
+
+          <div className="console-grid two">
+            <label>
+              Scenario name
+              <input value={form.variation_name} onChange={(event) => onFieldChange("variation_name", event.target.value)} />
+            </label>
+            <label>
+              Scenario notes
+              <input value={form.variation_notes} onChange={(event) => onFieldChange("variation_notes", event.target.value)} />
+            </label>
+          </div>
+
+          <div className="console-grid four">
+            <label>
+              Budget change %
+              <input
+                value={form.variation_budget_change_pct}
+                onChange={(event) => onFieldChange("variation_budget_change_pct", event.target.value)}
+              />
+            </label>
+            <label>
+              Market condition
+              <select
+                value={form.variation_market_condition}
+                onChange={(event) => onFieldChange("variation_market_condition", event.target.value)}
+              >
+                <option value="base">Base</option>
+                <option value="bearish">Bearish</option>
+                <option value="bullish">Bullish</option>
+              </select>
+            </label>
+            <label>
+              Competition
+              <select
+                value={form.variation_competition_level}
+                onChange={(event) => onFieldChange("variation_competition_level", event.target.value)}
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label>
+              Pricing change %
+              <input
+                value={form.variation_pricing_change_pct}
+                onChange={(event) => onFieldChange("variation_pricing_change_pct", event.target.value)}
+              />
+            </label>
+          </div>
+
           {error ? <p className="console-error">{error}</p> : null}
 
           <div className="console-actions">

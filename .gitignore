@@ -4,9 +4,11 @@ __pycache__/
 
 frontend/node_modules/
 frontend/dist/
+frontend/*.png
 
 uvicorn.err.log
 uvicorn.out.log
+backend/memory/persistent_history.json
 
 python-3.11.9-amd64.exe
 python-3.11.9-embed-amd64.zip

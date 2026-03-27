@@ -8,24 +8,12 @@ import SimulationView from "./views/SimulationView";
 
 function App() {
   const [activeView, setActiveView] = useState("simulation");
-  const [form, setForm] = useState({
-    company_name: "HelixOps AI",
-    industry: "AI workflow SaaS",
-    region: "North America",
-    company_stage: "Seed",
-    business_problem: sampleProblem,
-    objectives: "Validate healthcare expansion, protect runway, design a realistic go-to-market plan",
-    current_constraints: "11 months runway, compliance complexity, lean sales team, limited implementation bandwidth",
-    runway_months: "11",
-    gross_margin: "68",
-    cac_payback_months: "15",
-    price_point: "28000",
-  });
+  const [form, setForm] = useState(buildDefaultForm());
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [typingIndex, setTypingIndex] = useState(0);
-  const [consoleOpen, setConsoleOpen] = useState(true);
+  const [consoleOpen, setConsoleOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -52,9 +40,10 @@ function App() {
     return Array.from(grouped.entries());
   }, [result]);
 
-  const agentDefinitionsMap = useMemo(() => {
-    return Object.fromEntries((result?.agent_definitions ?? []).map((entry) => [entry.name, entry]));
-  }, [result]);
+  const agentDefinitionsMap = useMemo(
+    () => Object.fromEntries((result?.agent_definitions ?? []).map((entry) => [entry.name, entry])),
+    [result],
+  );
 
   const conversation = result?.conversation ?? [];
   const timeline = result?.round_summaries?.length ? result.round_summaries : defaultTimeline;
@@ -64,8 +53,11 @@ function App() {
   const displayedRounds = result?.round_summaries?.length ?? 3;
   const currentRound = loading ? Math.min(3, Math.floor((typingIndex / 3) % 3) + 1) : lastTurn?.round ?? 0;
   const scenarioTitle = result?.company_name ?? form.company_name;
-  const highestRisk = result?.risks?.[0] ?? result?.final_output?.risks?.[0] ?? "Awaiting board debate.";
-  const recommendedDirective = result?.final_output?.recommended_actions?.[0] ?? "Awaiting executive directive.";
+  const highestRisk = result?.final_output?.risks?.[0] ?? "Awaiting board debate.";
+  const recommendedDirective =
+    result?.final_output?.recommended_actions?.[0] ??
+    result?.actions?.execution_plan?.[0]?.step ??
+    "Awaiting executive directive.";
 
   const topConflictByRound = useMemo(() => {
     const map = new Map();
@@ -77,10 +69,7 @@ function App() {
     return map;
   }, [result]);
 
-  const intelligenceMetrics = useMemo(
-    () => buildIntelligenceMetrics({ result, loading }),
-    [result, loading],
-  );
+  const intelligenceMetrics = useMemo(() => buildIntelligenceMetrics({ result, loading }), [result, loading]);
   const semanticStream = useMemo(() => buildSemanticStream({ result }), [result]);
   const timelinePoints = useMemo(() => buildInferenceTimeline({ result, timeline }), [result, timeline]);
   const agentCards = useMemo(
@@ -111,10 +100,13 @@ function App() {
         cac_payback_months: Number(form.cac_payback_months),
         price_point: Number(form.price_point),
       },
+      scenario_variations: buildScenarioVariations(form),
     };
 
     try {
-      const response = await fetch(`${API_BASE}/analyze`, {
+      setResult(createEmptyResult(form.company_name));
+
+      const response = await fetch(`${API_BASE}/analyze/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -124,8 +116,37 @@ function App() {
         throw new Error(`Request failed with status ${response.status}`);
       }
 
-      const data = await response.json();
-      setResult(data);
+      if (!response.body) {
+        throw new Error("Streaming response body is unavailable.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines.map((entry) => entry.trim()).filter(Boolean)) {
+          const payloadLine = JSON.parse(line);
+          if (payloadLine.type === "error") {
+            throw new Error(payloadLine.error || "Unknown streaming error.");
+          }
+          if (payloadLine.type === "final") {
+            setResult(payloadLine.result);
+            continue;
+          }
+          setResult((current) => mergeStreamEvent(current ?? createEmptyResult(form.company_name), payloadLine));
+        }
+      }
+
       setConsoleOpen(false);
     } catch (submissionError) {
       setError(submissionError.message || "Unable to analyze the business problem.");
@@ -135,20 +156,7 @@ function App() {
   }
 
   function applySample() {
-    setForm((current) => ({
-      ...current,
-      business_problem: sampleProblem,
-      company_name: "HelixOps AI",
-      industry: "AI workflow SaaS",
-      region: "North America",
-      company_stage: "Seed",
-      objectives: "Validate healthcare expansion, protect runway, design a realistic go-to-market plan",
-      current_constraints: "11 months runway, compliance complexity, lean sales team, limited implementation bandwidth",
-      runway_months: "11",
-      gross_margin: "68",
-      cac_payback_months: "15",
-      price_point: "28000",
-    }));
+    setForm(buildDefaultForm());
     setConsoleOpen(true);
   }
 
@@ -220,6 +228,11 @@ function App() {
           scenarioTitle={scenarioTitle}
           highestRisk={highestRisk}
           recommendedDirective={recommendedDirective}
+          actionPlan={result?.actions}
+          explainability={result?.explainability}
+          memorySummary={result?.memory_summary}
+          scenarioResults={result?.scenario_results ?? []}
+          validation={result?.validation}
           onToggleConsole={toggleConsole}
           onApplySample={applySample}
         />
@@ -228,7 +241,7 @@ function App() {
           <aside className="command-side-nav">
             <div className="side-nav-header">
               <div className="side-nav-badge">
-                <span className="material-symbols-outlined">deployed_code</span>
+                <span className="material-symbols-outlined">memory</span>
               </div>
               <div>
                 <strong>COMMAND_01</strong>
@@ -312,16 +325,17 @@ function buildIntelligenceMetrics({ result, loading }) {
   const confidence = result?.final_output?.confidence ?? 84;
   const conflicts = result?.conflicts?.length ?? 2;
   const turns = result?.conversation?.length ?? 12;
+  const scenarioCount = result?.scenario_results?.length ?? 2;
 
   return {
-    throughput: (turns * 11.9).toFixed(1),
+    throughput: (turns * 11.9 + scenarioCount * 7.2).toFixed(1),
     accuracy: Math.min(99.98, 72 + confidence * 0.28).toFixed(2),
     activeAgents: result?.agent_definitions?.length ?? Object.keys(AGENT_META).length,
-    riskVector: (conflicts * 0.02 + (loading ? 0.03 : 0.01)).toFixed(2),
+    riskVector: (conflicts * 0.02 + scenarioCount * 0.01 + (loading ? 0.03 : 0.01)).toFixed(2),
     latency: loading ? "18MS" : "14MS",
-    activeNodes: 1320 + turns * 9,
+    activeNodes: 1320 + turns * 9 + scenarioCount * 18,
     bottlenecks: Math.max(0, conflicts - 1),
-    systemLoad: `${Math.min(92, 18 + turns * 2)}%`,
+    systemLoad: `${Math.min(92, 18 + turns * 2 + scenarioCount * 3)}%`,
     sparkline: ["32%", "54%", "68%", "41%", "76%", "82%", "58%", "29%", "72%", "38%"],
   };
 }
@@ -422,7 +436,9 @@ function buildAgentCards({ result, agentDefinitionsMap, speakingAgent, loading }
     const isSpeaking = name === speakingAgent;
     const healthValue = clamp(74 + avgConfidence * 0.24 + turns.length * 1.8, 76, 99.9);
     const loadValue = clamp(10 + turns.length * 12.4 + avgConfidence / 5, 12, 94.2);
-    const historyBars = [34, 56, 41, 74, 52].map((base, barIndex) => `${Math.max(18, Math.min(100, base + index * 2 - barIndex * 3))}%`);
+    const historyBars = [34, 56, 41, 74, 52].map(
+      (base, barIndex) => `${Math.max(18, Math.min(100, base + index * 2 - barIndex * 3))}%`,
+    );
 
     return {
       name,
@@ -454,13 +470,18 @@ function buildMatrixStats({ result, loading }) {
     overrides: [
       { label: "Deep Simulation Mode", detail: "Full Recursive Learning", enabled: true, tone: "accent" },
       { label: "Legacy Protocol", detail: "Deterministic Processing", enabled: false, tone: "neutral" },
-      { label: "Neural Firewall", detail: loading ? "Isolation Warming" : "Active Isolation", enabled: true, tone: "danger" },
+      {
+        label: "Neural Firewall",
+        detail: loading ? "Isolation Warming" : "Active Isolation",
+        enabled: true,
+        tone: "danger",
+      },
     ],
   };
 }
 
 function buildRiskAlerts({ result }) {
-  const risks = (result?.final_output?.risks ?? result?.risks ?? []).slice(0, 3).map((risk, index) => ({
+  const risks = (result?.final_output?.risks ?? []).slice(0, 3).map((risk, index) => ({
     id: `risk-${index}`,
     timestamp: `R${index + 1} · UTC`,
     severity: "Severity: High",
@@ -525,8 +546,8 @@ function buildRiskMetrics({ result, highestRisk }) {
   return {
     globalIndex: stability.toFixed(2),
     delta: conflicts > 1 ? "▼ 1.4%" : "▲ 0.6%",
-    activeThreat: truncate(highestRisk, 24).replaceAll(" ", "_").toUpperCase(),
-    observation: (result?.conflicts?.[0]?.topic ?? "AS_PAC_VOLATILITY").replaceAll(" ", "_").toUpperCase(),
+    activeThreat: formatRiskLabel(highestRisk, 24),
+    observation: formatRiskLabel(result?.conflicts?.[0]?.topic ?? "AS PAC VOLATILITY", 24),
     stats: [
       { label: "Max Drift", value: `${(conflicts * 3.1 + 6.2).toFixed(1)}%` },
       { label: "Avg Latency", value: `${12 + conflicts * 2}ms` },
@@ -549,10 +570,10 @@ function getAgentProfile(name, meta) {
         badgeLabel: "Uptime",
         badgeValue: () => "99.99%",
         historyLabel: "History",
-        status: () => "Core_Module_Active",
+        status: () => "Core Module Active",
         footerIcon: "settings_motion_mode",
         visualIcon: "radar",
-        visualLabel: "Decision_Bias",
+        visualLabel: "Decision Bias",
         tone: "gold",
       };
     case "Finance Agent":
@@ -560,10 +581,10 @@ function getAgentProfile(name, meta) {
         badgeLabel: "Throughput",
         badgeValue: (_, turns) => `${Math.max(1.4, turns * 0.8 + 1.6).toFixed(1)}M/s`,
         historyLabel: "Market Sync",
-        status: () => "Transaction_Ready",
+        status: () => "Transaction Ready",
         footerIcon: "check_circle",
         visualIcon: "analytics",
-        visualLabel: "Arbitrage_Delta",
+        visualLabel: "Arbitrage Delta",
         tone: "success",
       };
     case "Risk Agent":
@@ -571,10 +592,10 @@ function getAgentProfile(name, meta) {
         badgeLabel: "Threats",
         badgeValue: () => "ACTIVE_SCAN",
         historyLabel: "Attack Vector",
-        status: () => "Anomaly_Detected",
+        status: () => "Anomaly Detected",
         footerIcon: "warning",
         visualIcon: "crisis_alert",
-        visualLabel: "Stability_Index",
+        visualLabel: "Stability Index",
         tone: "danger",
       };
     case "Marketing Agent":
@@ -582,10 +603,10 @@ function getAgentProfile(name, meta) {
         badgeLabel: "Sentiment",
         badgeValue: (confidence) => `+${Math.round(confidence / 2)}%`,
         historyLabel: "Reach_Index",
-        status: () => "Campaign_Syncing",
+        status: () => "Campaign Syncing",
         footerIcon: "sync",
         visualIcon: "hub",
-        visualLabel: "Node_Coverage",
+        visualLabel: "Node Coverage",
         tone: "tertiary",
       };
     default:
@@ -593,10 +614,10 @@ function getAgentProfile(name, meta) {
         badgeLabel: "Confidence",
         badgeValue: (confidence) => `${Math.round(confidence)}%`,
         historyLabel: "Activity",
-        status: () => `${meta.boardRole.replaceAll(" ", "_")}_ACTIVE`,
+        status: () => `${meta.boardRole} Active`,
         footerIcon: "trending_up",
         visualIcon: meta.symbol,
-        visualLabel: "Operational_View",
+        visualLabel: "Ops View",
         tone: "primary",
       };
   }
@@ -635,11 +656,106 @@ function truncate(value, max) {
   return `${value.slice(0, max - 1)}…`;
 }
 
+function formatRiskLabel(value, max) {
+  const clean = truncate((value ?? "").replaceAll("_", " ").replace(/[.]/g, "").trim(), max);
+  return clean
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.toUpperCase())
+    .join(" ");
+}
+
 function splitList(value) {
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function buildScenarioVariations(form) {
+  if (!form.variation_name.trim()) {
+    return [];
+  }
+
+  return [
+    {
+      scenario: form.variation_name.trim(),
+      budget_change_pct: Number(form.variation_budget_change_pct || 0),
+      market_condition: form.variation_market_condition || "base",
+      competition_level: form.variation_competition_level || "medium",
+      pricing_change_pct: Number(form.variation_pricing_change_pct || 0),
+      notes: form.variation_notes.trim(),
+    },
+  ];
+}
+
+function createEmptyResult(companyName) {
+  return {
+    company_name: companyName,
+    agent_definitions: [],
+    conversation: [],
+    round_summaries: [],
+    conflicts: [],
+    final_output: null,
+    actions: null,
+    scenario_results: [],
+    explainability: null,
+    memory_summary: null,
+    validation: null,
+  };
+}
+
+function mergeStreamEvent(current, eventPayload) {
+  switch (eventPayload.type) {
+    case "turn":
+      return {
+        ...current,
+        conversation: [...(current.conversation ?? []), eventPayload.turn],
+      };
+    case "round_completed":
+      return {
+        ...current,
+        conflicts: [...(current.conflicts ?? []), ...(eventPayload.conflicts ?? [])],
+        round_summaries: [...(current.round_summaries ?? []), eventPayload.summary].filter(Boolean),
+      };
+    case "base_decision":
+      return {
+        ...current,
+        final_output: eventPayload.final_output,
+        actions: eventPayload.actions,
+        explainability: eventPayload.explainability,
+        memory_summary: eventPayload.memory_summary,
+      };
+    case "scenario_complete":
+      return {
+        ...current,
+        scenario_results: [...(current.scenario_results ?? []), eventPayload.scenario_result],
+      };
+    default:
+      return current;
+  }
+}
+
+function buildDefaultForm() {
+  return {
+    company_name: "HelixOps AI",
+    industry: "AI workflow SaaS",
+    region: "North America",
+    company_stage: "Seed",
+    business_problem: sampleProblem,
+    objectives: "Validate healthcare expansion, protect runway, design a realistic go-to-market plan",
+    current_constraints: "11 months runway, compliance complexity, lean sales team, limited implementation bandwidth",
+    runway_months: "11",
+    gross_margin: "68",
+    cac_payback_months: "15",
+    price_point: "28000",
+    variation_name: "Healthcare Downside Shock",
+    variation_budget_change_pct: "-20",
+    variation_market_condition: "bearish",
+    variation_competition_level: "high",
+    variation_pricing_change_pct: "-10",
+    variation_notes: "Stress test the plan under tighter budgets and stronger incumbents.",
+  };
 }
 
 export default App;
