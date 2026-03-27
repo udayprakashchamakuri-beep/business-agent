@@ -50,6 +50,13 @@ iith/
 ## Backend Endpoints
 
 - `GET /health`
+- `GET /auth/session`
+- `POST /auth/register`
+- `GET /auth/verify-email`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `POST /auth/request-password-reset`
+- `POST /auth/reset-password`
 - `POST /analyze`
 - `POST /analyze/stream`
 
@@ -79,6 +86,14 @@ BRIGHTDATA_ZONE=your_brightdata_zone
 BRIGHTDATA_COUNTRY=us
 
 FRONTEND_ORIGIN=https://udayprakashchamakuri-beep.github.io
+ALLOWED_HOSTS=localhost,127.0.0.1,*.vercel.app
+FORCE_HTTPS=true
+SESSION_COOKIE_NAME=business_agent_session
+SESSION_TTL_SECONDS=43200
+EMAIL_VERIFICATION_TTL_SECONDS=86400
+PASSWORD_RESET_TTL_SECONDS=1800
+AUTH_PREVIEW_LINKS=false
+LOG_LEVEL=INFO
 ```
 
 If those variables are not present, the simulator still works using the internal reasoning engine.
@@ -88,6 +103,14 @@ Bright Data note:
 - the API key alone is not enough
 - you also need the Bright Data `zone` name for the product you want to use
 - until `BRIGHTDATA_ZONE` is set, the simulator will safely skip Bright Data grounding and continue with internal reasoning
+
+Authentication note:
+
+- passwords are hashed server-side with `scrypt`
+- sessions are stored on the server and expire automatically
+- email verification and password reset tokens expire automatically
+- `AUTH_PREVIEW_LINKS` should stay `false` in production so verification and reset links are not echoed back to the browser
+- provider API keys and auth configuration belong only in server-side environment variables, never in frontend code
 
 ## Run Locally
 
@@ -147,6 +170,14 @@ A Dockerfile is included:
 
 You can deploy that backend to Render, Railway, Fly.io, or another container host, then point `VITE_API_BASE_URL` at that backend URL.
 
+Security deployment checklist:
+
+- enforce HTTPS end to end
+- keep all auth and provider secrets in server-side environment variables
+- do not expose any database to the public internet; use private networking or local on-host storage only
+- monitor authentication failures, rate-limit events, and API errors in your platform logs
+- rotate any credential that was ever shared outside the server environment
+
 ## Persistent Memory
 
 Past simulations are stored in:
@@ -154,6 +185,7 @@ Past simulations are stored in:
 - `backend/memory/persistent_history.json`
 
 That file is ignored by git, so production learning data is not committed back to the repo.
+Simulation memory is scoped per authenticated user so one person's saved board history cannot leak into another person's analysis.
 
 ## Validation Goals
 

@@ -16,6 +16,7 @@ from backend.controller.schemas import (
 )
 from backend.debate_engine.engine import DebateEngine, DebateResult
 from backend.memory.manager import MemoryManager
+from backend.security.auth import build_scoped_memory_key
 
 
 class EnterpriseOrchestrator:
@@ -28,29 +29,37 @@ class EnterpriseOrchestrator:
         self.action_engine = ActionEngine()
         self.explainability_engine = ExplainabilityEngine()
 
-    def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
-        return self._run_analysis(request=request)
+    def analyze(self, request: AnalyzeRequest, user_id: str) -> AnalyzeResponse:
+        return self._run_analysis(request=request, user_id=user_id)
 
     def stream_analyze(
         self,
         request: AnalyzeRequest,
+        user_id: str,
         event_handler: Callable[[Dict[str, object]], None],
     ) -> AnalyzeResponse:
-        return self._run_analysis(request=request, event_handler=event_handler)
+        return self._run_analysis(request=request, user_id=user_id, event_handler=event_handler)
 
     def _run_analysis(
         self,
         request: AnalyzeRequest,
+        user_id: str,
         event_handler: Optional[Callable[[Dict[str, object]], None]] = None,
     ) -> AnalyzeResponse:
+        scoped_request = request.model_copy(deep=True)
+        scoped_request.memory_key = build_scoped_memory_key(
+            user_id=user_id,
+            company_name=scoped_request.company_name,
+            requested_memory_key=scoped_request.memory_key,
+        )
         self._emit(event_handler, {"type": "analysis_started", "company_name": request.company_name})
 
-        active_agents = self._resolve_agents(request.selected_agent_names)
+        active_agents = self._resolve_agents(scoped_request.selected_agent_names)
         active_definitions = [agent.profile.definition for agent in active_agents]
-        memory = MemoryManager(request)
+        memory = MemoryManager(scoped_request, user_id=user_id)
         debate_engine = DebateEngine(agents=active_agents, memory=memory)
         debate_result = debate_engine.run(
-            request,
+            scoped_request,
             event_handler=event_handler,
         )
         final_output = self.decision_engine.decide(
@@ -67,7 +76,7 @@ class EnterpriseOrchestrator:
             final_decision=final_output.decision,
         )
         actions = self.action_engine.build(
-            request=request,
+            request=scoped_request,
             final_decision=final_output.decision,
             latest_turns=latest_turns,
         )
@@ -86,6 +95,7 @@ class EnterpriseOrchestrator:
 
         scenario_results = self._run_scenarios(
             base_request=request,
+            user_id=user_id,
             base_result=debate_result,
             base_decision=final_output.decision,
             base_explainability_top=explainability.top_influencer,
@@ -115,7 +125,7 @@ class EnterpriseOrchestrator:
         )
 
         memory.record_simulation(
-            request=request,
+            request=scoped_request,
             final_output=final_output,
             explainability=explainability,
             conversation=debate_result.conversation,
@@ -127,6 +137,7 @@ class EnterpriseOrchestrator:
     def _run_scenarios(
         self,
         base_request: AnalyzeRequest,
+        user_id: str,
         base_result: DebateResult,
         base_decision: str,
         base_explainability_top: str,
@@ -139,6 +150,11 @@ class EnterpriseOrchestrator:
 
         for variation in variations:
             scenario_request = self._apply_variation(base_request, variation)
+            scenario_request.memory_key = build_scoped_memory_key(
+                user_id=user_id,
+                company_name=scenario_request.company_name,
+                requested_memory_key=scenario_request.memory_key,
+            )
             self._emit(
                 event_handler,
                 {
@@ -147,7 +163,7 @@ class EnterpriseOrchestrator:
                     "variation": variation.model_dump(),
                 },
             )
-            memory = MemoryManager(scenario_request)
+            memory = MemoryManager(scenario_request, user_id=user_id)
             debate_engine = DebateEngine(agents=active_agents, memory=memory)
             scenario_debate = debate_engine.run(scenario_request)
             scenario_final = self.decision_engine.decide(

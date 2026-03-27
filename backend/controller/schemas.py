@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 DecisionStatus = Literal["GO", "MODIFY", "NO GO"]
 ReasoningMode = Literal["heuristic", "auto"]
@@ -19,16 +20,27 @@ class ScenarioVariation(BaseModel):
     pricing_change_pct: float = Field(default=0.0, description="Percent change applied to pricing assumptions.")
     notes: Optional[str] = None
 
+    @field_validator("scenario", "notes")
+    @classmethod
+    def sanitize_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", value).strip()
+        if len(clean) > 240:
+            raise ValueError("Scenario text is too long.")
+        return clean
+
 
 class AnalyzeRequest(BaseModel):
-    company_name: str = Field(default="Autonomous Venture")
-    industry: Optional[str] = None
-    region: Optional[str] = None
-    company_stage: str = Field(default="Seed")
+    company_name: str = Field(default="Autonomous Venture", max_length=120)
+    industry: Optional[str] = Field(default=None, max_length=120)
+    region: Optional[str] = Field(default=None, max_length=120)
+    company_stage: str = Field(default="Seed", max_length=80)
     selected_agent_names: List[str] = Field(default_factory=list)
     business_problem: str = Field(
         ...,
         min_length=20,
+        max_length=5000,
         description="The business problem or strategic decision that the AI company board must debate.",
     )
     objectives: List[str] = Field(default_factory=list)
@@ -37,7 +49,72 @@ class AnalyzeRequest(BaseModel):
     reasoning_mode: ReasoningMode = Field(default="heuristic")
     scenario_name: str = Field(default="Base Scenario")
     scenario_variations: List[ScenarioVariation] = Field(default_factory=list)
-    memory_key: Optional[str] = Field(default=None, description="Optional stable key for persistent learning context.")
+    memory_key: Optional[str] = Field(default=None, max_length=120, description="Optional stable key for persistent learning context.")
+
+    @field_validator("company_name", "industry", "region", "company_stage", "business_problem", "scenario_name", "memory_key")
+    @classmethod
+    def sanitize_scalar_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", value).strip()
+        if not clean:
+            raise ValueError("Text fields cannot be empty.")
+        return clean
+
+    @field_validator("selected_agent_names")
+    @classmethod
+    def validate_selected_agents(cls, value: List[str]) -> List[str]:
+        if len(value) > 10:
+            raise ValueError("Too many advisors selected.")
+        cleaned = []
+        for item in value:
+            text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(item)).strip()
+            if not text:
+                continue
+            if len(text) > 80:
+                raise ValueError("Advisor name is too long.")
+            cleaned.append(text)
+        return cleaned
+
+    @field_validator("objectives", "current_constraints")
+    @classmethod
+    def validate_text_lists(cls, value: List[str]) -> List[str]:
+        if len(value) > 20:
+            raise ValueError("Too many list items submitted.")
+        cleaned_items: List[str] = []
+        for item in value:
+            clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(item)).strip()
+            if not clean:
+                continue
+            if len(clean) > 240:
+                raise ValueError("A list item is too long.")
+            cleaned_items.append(clean)
+        return cleaned_items
+
+    @field_validator("known_metrics")
+    @classmethod
+    def validate_known_metrics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        if len(value) > 20:
+            raise ValueError("Too many metric fields submitted.")
+        allowed = {
+            "runway_months",
+            "gross_margin",
+            "cac_payback_months",
+            "price_point",
+            "scenario_budget_change_pct",
+            "scenario_market_condition",
+            "scenario_competition_level",
+            "scenario_pricing_change_pct",
+        }
+        sanitized: Dict[str, Any] = {}
+        for key, raw_value in value.items():
+            if key not in allowed:
+                continue
+            if isinstance(raw_value, (int, float)):
+                sanitized[key] = raw_value
+            elif isinstance(raw_value, str) and len(raw_value) <= 80:
+                sanitized[key] = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", raw_value).strip()
+        return sanitized
 
 
 class AgentDefinition(BaseModel):

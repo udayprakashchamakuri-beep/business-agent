@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import AuthPanel from "./components/AuthPanel";
 import CommandConsoleDrawer from "./components/CommandConsoleDrawer";
 import { AGENT_META, API_BASE, DEMO_CASES, NAV_ITEMS, defaultTimeline } from "./dashboardData";
 import { formatDecisionLabel, toPlainText } from "./plainLanguage";
@@ -22,6 +23,45 @@ function App() {
   const [selectedAgentName, setSelectedAgentName] = useState("CEO Agent");
   const [focusedAgentNames, setFocusedAgentNames] = useState([]);
   const [utilityPanel, setUtilityPanel] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSession() {
+      try {
+        const response = await fetch(`${API_BASE}/auth/session`, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!active) {
+          return;
+        }
+        if (response.ok) {
+          setAuthUser(await response.json());
+        } else {
+          setAuthUser(null);
+        }
+      } catch (_error) {
+        if (active) {
+          setAuthUser(null);
+        }
+      } finally {
+        if (active) {
+          setAuthReady(true);
+        }
+      }
+    }
+
+    loadSession();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -108,6 +148,9 @@ function App() {
       }
     } catch (submissionError) {
       const rawMessage = submissionError?.message || "Unable to analyze the business problem.";
+      if (/please sign in|unauthorized|401/i.test(rawMessage)) {
+        setAuthUser(null);
+      }
       const friendlyMessage =
         /failed to fetch|networkerror|load failed|unable to connect/i.test(rawMessage)
           ? "We could not reach the advisory service just now. Please wait a few seconds and try again."
@@ -121,11 +164,15 @@ function App() {
   async function runStreamingAnalysis(payload) {
     const response = await fetch(`${API_BASE}/analyze/stream`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Please sign in to continue.");
+      }
       throw new Error(`Request failed with status ${response.status}`);
     }
 
@@ -164,11 +211,15 @@ function App() {
   async function runRegularAnalysis(payload) {
     const response = await fetch(`${API_BASE}/analyze`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Please sign in to continue.");
+      }
       throw new Error(`Request failed with status ${response.status}`);
     }
 
@@ -285,6 +336,138 @@ function App() {
     setUtilityPanel("status");
   }
 
+  async function handleLogin(payload) {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(body?.detail || "Unable to sign in.");
+      }
+      setAuthUser(body);
+      setAuthMessage("Signed in successfully.");
+    } catch (submissionError) {
+      setAuthMessage(submissionError.message || "Unable to sign in.");
+    } finally {
+      setAuthBusy(false);
+      setAuthReady(true);
+    }
+  }
+
+  async function handleRegister(payload) {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(body?.detail || "Unable to create account.");
+      }
+      setAuthMessage(
+        body.verification_preview_url
+          ? `Account created. Verify your email using this link: ${body.verification_preview_url}`
+          : "Account created. Please verify your email before signing in.",
+      );
+    } catch (submissionError) {
+      setAuthMessage(submissionError.message || "Unable to create account.");
+    } finally {
+      setAuthBusy(false);
+      setAuthReady(true);
+    }
+  }
+
+  async function handleRequestReset(payload) {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/request-password-reset`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(body?.detail || "Unable to request a password reset.");
+      }
+      setAuthMessage(
+        body.reset_preview_url
+          ? `Reset link created. Use this link: ${body.reset_preview_url}`
+          : body.message || "If the account exists, a reset link has been prepared.",
+      );
+    } catch (submissionError) {
+      setAuthMessage(submissionError.message || "Unable to request a password reset.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleResetPassword(payload) {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(body?.detail || "Unable to update the password.");
+      }
+      setAuthMessage(body.message || "Password updated. You can now sign in.");
+    } catch (submissionError) {
+      setAuthMessage(submissionError.message || "Unable to update the password.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setAuthUser(null);
+      setAuthBusy(false);
+    }
+  }
+
+  if (!authReady) {
+    return <div className="auth-loading">Checking secure session...</div>;
+  }
+
+  if (!authUser) {
+    return (
+      <AuthPanel
+        loading={loading}
+        authUser={authUser}
+        authBusy={authBusy}
+        authMessage={authMessage}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onRequestReset={handleRequestReset}
+        onResetPassword={handleResetPassword}
+      />
+    );
+  }
+
   return (
     <div className={`obsidian-app app-view-${activeView}`}>
       <nav className="obsidian-nav global-nav">
@@ -323,6 +506,9 @@ function App() {
             <IconButton icon="notifications" onClick={() => setActiveView("intelligence")} label="Open overview page" />
             <IconButton icon="settings" onClick={openStatusPanel} label="Open system status" />
           </div>
+          <button type="button" className="secondary-action nav-logout" onClick={handleLogout}>
+            Sign out
+          </button>
           <button type="button" className="deploy-button" onClick={toggleConsole}>
             Start Analysis
           </button>
@@ -1133,6 +1319,14 @@ function wait(milliseconds) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, milliseconds);
   });
+}
+
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch (_error) {
+    return null;
+  }
 }
 
 function mergeStreamEvent(current, eventPayload) {

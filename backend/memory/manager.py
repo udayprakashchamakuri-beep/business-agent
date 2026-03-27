@@ -45,8 +45,9 @@ class MemoryManager:
         "Sales Strategy Agent",
     ]
 
-    def __init__(self, request: AnalyzeRequest | None = None) -> None:
+    def __init__(self, request: AnalyzeRequest | None = None, user_id: str | None = None) -> None:
         self.request = request
+        self.user_id = user_id or "anonymous"
         self.global_history: List[AgentTurn] = []
         self.round_summaries: List[RoundSummary] = []
         self.persistent_records = self._load_records()
@@ -159,6 +160,7 @@ class MemoryManager:
 
         record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user_id": self.user_id,
             "memory_key": request.memory_key or request.company_name.lower().replace(" ", "-"),
             "company_name": request.company_name,
             "industry": request.industry,
@@ -203,9 +205,12 @@ class MemoryManager:
         matched = [
             record
             for record in self.persistent_records
-            if record.get("memory_key") == memory_key
-            or (request.industry and record.get("industry") == request.industry)
-            or record.get("company_name") == request.company_name
+            if record.get("user_id") == self.user_id
+            and (
+                record.get("memory_key") == memory_key
+                or (request.industry and record.get("industry") == request.industry)
+                or record.get("company_name") == request.company_name
+            )
         ]
         return list(reversed(matched))[:5]
 
