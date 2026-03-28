@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-function RiskView({ riskMetrics, riskAlerts }) {
+function RiskView({ riskMetrics, riskAlerts, autonomyStatus, autonomyBusy, autonomyError, onRunAutonomy }) {
   const [shockIntensity, setShockIntensity] = useState(75);
   const [autonomyMode, setAutonomyMode] = useState("balanced");
   const [mapZoom, setMapZoom] = useState(1);
@@ -62,6 +62,8 @@ function RiskView({ riskMetrics, riskAlerts }) {
   const activeStats = simulationResult?.stats ?? riskMetrics.stats;
   const activeThreat = simulationResult?.activeThreat ?? riskMetrics.activeThreat;
   const observation = simulationResult?.observation ?? riskMetrics.observation;
+  const automaticActions = autonomyStatus?.recent_actions ?? [];
+  const openTasks = autonomyStatus?.open_tasks ?? [];
 
   const mapViewLabel =
     mapView === "world" ? "Overall risk picture" : mapView === "hotspots" ? "Main risk hotspots" : "Operations and supply risks";
@@ -480,6 +482,54 @@ function RiskView({ riskMetrics, riskAlerts }) {
             ) : (
               <p className="sandbox-result">Run the scenario tester to see how the chart, alert feed, and map change under new conditions.</p>
             )}
+          </div>
+        </section>
+
+        <section className="panel autonomous-risk-panel">
+          <div className="panel-topline">
+            <div>
+              <h2>Automatic Risk Actions</h2>
+              <p>{autonomyStatus?.scheduler_mode || "Monitor status loading"}</p>
+            </div>
+            <button type="button" className="status-chip accent legend-button" onClick={onRunAutonomy} disabled={autonomyBusy}>
+              {autonomyBusy ? "Running..." : "Run monitor now"}
+            </button>
+          </div>
+
+          {autonomyError ? <p className="autonomy-error">{autonomyError}</p> : null}
+
+          <div className="autonomous-risk-columns">
+            <div>
+              <h3>Recent actions</h3>
+              <div className="autonomy-action-list">
+                {automaticActions.length ? (
+                  automaticActions.slice(0, 4).map((action) => (
+                    <article key={action.id} className={`autonomy-action-item tone-${action.status}`}>
+                      <p>{action.title}</p>
+                      <span>{action.reason}</span>
+                    </article>
+                  ))
+                ) : (
+                  <p className="autonomy-empty">No automatic actions logged yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3>Open tasks</h3>
+              <div className="autonomy-watch-list">
+                {openTasks.length ? (
+                  openTasks.slice(0, 4).map((task) => (
+                    <article key={task.id} className="autonomy-watch-item">
+                      <strong>{task.watch_label}</strong>
+                      <span>{task.title}</span>
+                    </article>
+                  ))
+                ) : (
+                  <p className="autonomy-empty">No open automatic tasks right now.</p>
+                )}
+              </div>
+            </div>
           </div>
         </section>
       </div>

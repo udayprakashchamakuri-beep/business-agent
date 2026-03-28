@@ -2333,6 +2333,74 @@ a {
   background: linear-gradient(180deg, rgba(0, 255, 148, 0.7), rgba(0, 255, 148, 0.14));
 }
 
+.autonomy-panel,
+.autonomous-risk-panel {
+  display: grid;
+  gap: 14px;
+  background:
+    linear-gradient(180deg, rgba(0, 255, 148, 0.06), transparent 30%),
+    rgba(21, 27, 45, 0.72);
+}
+
+.autonomy-run-summary,
+.autonomy-empty {
+  margin: 0;
+  color: rgba(220, 225, 251, 0.72);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.autonomy-error {
+  margin: 0;
+  color: #ffb4ab;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.autonomy-watch-list,
+.autonomy-action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.autonomy-watch-item,
+.autonomy-action-item {
+  display: grid;
+  gap: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 13, 31, 0.62);
+  padding: 11px 12px;
+}
+
+.autonomy-watch-item strong,
+.autonomy-action-item p {
+  margin: 0;
+  color: #dde3eb;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.autonomy-watch-item span,
+.autonomy-action-item span {
+  color: rgba(220, 225, 251, 0.66);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.autonomy-action-item.tone-executed {
+  border-color: rgba(0, 255, 148, 0.4);
+}
+
+.autonomy-action-item.tone-skipped {
+  border-color: rgba(255, 225, 109, 0.36);
+}
+
+.autonomy-action-item.tone-failed {
+  border-color: rgba(255, 180, 171, 0.4);
+}
+
 .timeline-panel {
   margin-top: 24px;
 }
@@ -3532,6 +3600,25 @@ a {
   border-left-color: var(--finance);
 }
 
+.autonomous-risk-panel {
+  grid-column: 1 / -1;
+}
+
+.autonomous-risk-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.autonomous-risk-columns h3 {
+  margin: 0 0 10px;
+  color: #dde3eb;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .risk-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3565,6 +3652,12 @@ a {
 
 .command-footer-live {
   color: var(--finance);
+}
+
+@media (max-width: 900px) {
+  .autonomous-risk-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .console-divider {

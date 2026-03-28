@@ -32,6 +32,9 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const [autonomyStatus, setAutonomyStatus] = useState(null);
+  const [autonomyBusy, setAutonomyBusy] = useState(false);
+  const [autonomyError, setAutonomyError] = useState("");
 
   useEffect(() => {
     if (DEMO_AUTH_DISABLED) {
@@ -78,6 +81,44 @@ function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !authUser) {
+      return undefined;
+    }
+
+    let active = true;
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch(`${API_BASE}/autonomy/status`, {
+          method: "GET",
+          credentials: "include",
+        });
+        const body = await safeJson(response);
+        if (!active) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(body?.detail || "Unable to load automatic monitoring status.");
+        }
+        setAutonomyStatus(body);
+        setAutonomyError("");
+      } catch (statusError) {
+        if (active) {
+          setAutonomyError(statusError.message || "Unable to load automatic monitoring status.");
+        }
+      }
+    }
+
+    refreshStatus();
+    const timer = window.setInterval(refreshStatus, 45000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [authReady, authUser]);
 
   useEffect(() => {
     if (!loading) {
@@ -357,6 +398,26 @@ function App() {
     setUtilityPanel("status");
   }
 
+  async function runAutonomyCycle() {
+    setAutonomyBusy(true);
+    setAutonomyError("");
+    try {
+      const response = await fetch(`${API_BASE}/autonomy/run`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(body?.detail || "Unable to run the automatic monitor right now.");
+      }
+      setAutonomyStatus(body);
+    } catch (submissionError) {
+      setAutonomyError(submissionError.message || "Unable to run the automatic monitor right now.");
+    } finally {
+      setAutonomyBusy(false);
+    }
+  }
+
   async function handleLogin(payload) {
     setAuthBusy(true);
     setAuthMessage("");
@@ -624,6 +685,10 @@ function App() {
                 semanticStream={semanticStream}
                 timelinePoints={timelinePoints}
                 agentTelemetry={agentCards}
+                autonomyStatus={autonomyStatus}
+                autonomyBusy={autonomyBusy}
+                autonomyError={autonomyError}
+                onRunAutonomy={runAutonomyCycle}
               />
             ) : null}
 
@@ -638,7 +703,16 @@ function App() {
               />
             ) : null}
 
-            {activeView === "risk" ? <RiskView riskMetrics={riskMetrics} riskAlerts={riskAlerts} /> : null}
+            {activeView === "risk" ? (
+              <RiskView
+                riskMetrics={riskMetrics}
+                riskAlerts={riskAlerts}
+                autonomyStatus={autonomyStatus}
+                autonomyBusy={autonomyBusy}
+                autonomyError={autonomyError}
+                onRunAutonomy={runAutonomyCycle}
+              />
+            ) : null}
           </div>
         </div>
       )}

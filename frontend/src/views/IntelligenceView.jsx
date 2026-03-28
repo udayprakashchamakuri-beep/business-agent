@@ -7,10 +7,18 @@ function IntelligenceView({
   semanticStream,
   timelinePoints,
   agentTelemetry,
+  autonomyStatus,
+  autonomyBusy,
+  autonomyError,
+  onRunAutonomy,
 }) {
   const [mapZoom, setMapZoom] = useState(1);
   const [focusMode, setFocusMode] = useState("balanced");
   const featuredNodes = focusMode === "active" ? agentTelemetry.slice(0, 3) : agentTelemetry.slice(0, 4);
+  const automaticRuns = autonomyStatus?.recent_runs ?? [];
+  const automaticActions = autonomyStatus?.recent_actions ?? [];
+  const watchedBusinesses = autonomyStatus?.watch_profiles ?? [];
+  const latestAutomaticRun = automaticRuns[0] ?? null;
 
   function zoomIn() {
     setMapZoom((current) => Math.min(1.6, Number((current + 0.15).toFixed(2))));
@@ -144,6 +152,46 @@ function IntelligenceView({
             <div className="load-bars">
               {intelligenceMetrics.sparkline.map((height, index) => (
                 <span key={`${height}-${index}`} style={{ height }} />
+              ))}
+            </div>
+          </div>
+
+          <div className="panel autonomy-panel">
+            <div className="panel-topline">
+              <div>
+                <h2>Automatic Actions</h2>
+                <p>{autonomyStatus?.scheduler_mode || "Loading monitor status"}</p>
+              </div>
+              <button type="button" className="status-chip accent legend-button" onClick={onRunAutonomy} disabled={autonomyBusy}>
+                {autonomyBusy ? "Running..." : "Run monitor now"}
+              </button>
+            </div>
+
+            {autonomyError ? <p className="autonomy-error">{autonomyError}</p> : null}
+            {latestAutomaticRun ? (
+              <p className="autonomy-run-summary">
+                Last run scanned {latestAutomaticRun.watches_scanned} watched businesses and logged{" "}
+                {latestAutomaticRun.actions_taken} actions.
+              </p>
+            ) : (
+              <p className="autonomy-run-summary">No monitor runs yet. Start one to generate autonomous actions.</p>
+            )}
+
+            <div className="autonomy-watch-list">
+              {(watchedBusinesses.slice(0, 3) || []).map((watch) => (
+                <article key={watch.id} className="autonomy-watch-item">
+                  <strong>{watch.label}</strong>
+                  <span>{watch.latest_signal_summary}</span>
+                </article>
+              ))}
+            </div>
+
+            <div className="autonomy-action-list">
+              {(automaticActions.slice(0, 3) || []).map((action) => (
+                <article key={action.id} className={`autonomy-action-item tone-${action.status}`}>
+                  <p>{action.title}</p>
+                  <span>{action.reason}</span>
+                </article>
               ))}
             </div>
           </div>

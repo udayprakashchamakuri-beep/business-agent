@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from backend.autonomy import AutonomousMonitorService, AutonomyStatusResponse
 from backend.config.env import load_local_env
 from backend.controller.orchestrator import EnterpriseOrchestrator
 from backend.controller.schemas import AnalyzeRequest, AnalyzeResponse
@@ -63,6 +64,7 @@ app.add_middleware(
 auth_service = AuthService()
 rate_limiter = RateLimiter()
 orchestrator = EnterpriseOrchestrator()
+autonomy_service = AutonomousMonitorService()
 demo_auth_disabled = os.getenv("DEMO_AUTH_DISABLED", "true").lower() == "true"
 
 
@@ -70,7 +72,15 @@ demo_auth_disabled = os.getenv("DEMO_AUTH_DISABLED", "true").lower() == "true"
 def startup() -> None:
     auth_service.initialize()
     auth_service.cleanup_expired()
+    autonomy_service.initialize()
+    autonomy_service.start()
     logger.info("startup.complete")
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    autonomy_service.stop()
+    logger.info("shutdown.complete")
 
 
 @app.middleware("http")
@@ -153,6 +163,16 @@ def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds
             detail="Too many requests. Please wait and try again.",
             headers={"Retry-After": str(result.retry_after_seconds)},
         )
+
+
+def _authorize_cron_request(request: Request) -> None:
+    expected = os.getenv("CRON_SECRET", "").strip()
+    if not expected:
+        return
+    header = request.headers.get("authorization", "")
+    token = header.replace("Bearer ", "", 1).strip() if header.startswith("Bearer ") else ""
+    if token != expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid cron secret.")
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -311,3 +331,32 @@ def analyze_stream(request: Request, payload: AnalyzeRequest, user: AuthUser = D
             yield json.dumps(payload_line) + "\n"
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@app.get("/autonomy/status", response_model=AutonomyStatusResponse)
+def autonomy_status(request: Request, user: AuthUser = Depends(_current_user)) -> AutonomyStatusResponse:
+    _check_origin(request)
+    _enforce_rate_limit(request, "autonomy-status-ip", limit=120, window_seconds=300)
+    return autonomy_service.get_status()
+
+
+@app.post("/autonomy/run", response_model=AutonomyStatusResponse)
+def autonomy_run(request: Request, user: AuthUser = Depends(_current_user)) -> AutonomyStatusResponse:
+    _check_origin(request)
+    _enforce_rate_limit(request, "autonomy-run-ip", limit=10, window_seconds=300)
+    _enforce_rate_limit(request, "autonomy-run-user", limit=6, window_seconds=300, subject=user.id)
+    try:
+        autonomy_service.run_cycle(trigger_source=f"manual:{user.id}")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return autonomy_service.get_status()
+
+
+@app.get("/autonomy/cron", response_model=AutonomyStatusResponse)
+def autonomy_cron(request: Request) -> AutonomyStatusResponse:
+    _authorize_cron_request(request)
+    try:
+        autonomy_service.run_cycle(trigger_source="cron")
+    except RuntimeError:
+        logger.info("autonomy.cron_skipped reason=already_running")
+    return autonomy_service.get_status()
