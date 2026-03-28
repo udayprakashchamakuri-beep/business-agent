@@ -73,12 +73,12 @@ class ExplainabilityEngine:
         lead = traces[0]
         tail = traces[1:3]
         disagreement_summary = (
-            f"The heaviest disagreement centered on {conflicts[0].conflict_type.lower()}."
+            f"The biggest disagreement was about {conflicts[0].conflict_type.lower()}."
             if conflicts
-            else "Conflict stayed manageable and the board mostly converged through sequencing."
+            else "The team disagreed on some details, but most people moved toward the same overall direction."
         )
         challenger_names = ", ".join(item.agent_name for item in tail) if tail else "the rest of the board"
         return (
-            f"The board landed on {final_decision} because {lead.agent_name} carried the strongest aligned influence signal, "
-            f"while {challenger_names} shaped the operating conditions around that conclusion. {disagreement_summary}"
+            f"The team ended up at {final_decision} mainly because {lead.agent_name} had the strongest influence, "
+            f"while {challenger_names} helped shape the conditions and trade-offs around that choice. {disagreement_summary}"
         )

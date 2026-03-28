@@ -80,7 +80,11 @@ class DecisionEngine:
             risks.append("Hiring believes org capacity is too tight for a broad expansion without a narrower first phase.")
 
         key_reasons.append(
-            f"Weighted board sentiment normalized to {normalized:.2f}, with average modeled ROI of {avg_roi:.1f}% and payback of {avg_payback:.1f} months."
+            self._build_plain_language_summary(
+                normalized=normalized,
+                avg_roi=avg_roi,
+                avg_payback=avg_payback,
+            )
         )
 
         for summary in round_summaries[-2:]:
@@ -134,4 +138,26 @@ class DecisionEngine:
             key_reasons=key_reasons[:5],
             risks=risks[:5],
             recommended_actions=recommended_actions[:6],
+        )
+
+    def _build_plain_language_summary(self, normalized: float, avg_roi: float, avg_payback: float) -> str:
+        if normalized >= 0.18:
+            sentiment = "mostly positive"
+        elif normalized >= 0.05:
+            sentiment = "slightly positive"
+        elif normalized > -0.05:
+            sentiment = "mixed"
+        elif normalized > -0.18:
+            sentiment = "slightly cautious"
+        else:
+            sentiment = "strongly cautious"
+
+        if avg_roi < 0:
+            return_text = f"the current model points to a loss of about {abs(avg_roi):.1f}%"
+        else:
+            return_text = f"the current model points to about {avg_roi:.1f}% return"
+
+        return (
+            f"The team felt {sentiment} overall. Based on the current assumptions, {return_text}, "
+            f"and it would take about {avg_payback:.1f} months to earn the upfront money back."
         )

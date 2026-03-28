@@ -309,7 +309,7 @@ class EnterpriseOrchestrator:
         shifts: List[str] = []
         if base_top_influencer != scenario_top_influencer:
             shifts.append(
-                f"Top influence shifted from {base_top_influencer} to {scenario_top_influencer} under the new assumptions."
+                f"The most influential advisor changed from {base_top_influencer} to {scenario_top_influencer} in this scenario."
             )
 
         for agent_name, scenario_turn in scenario_latest_turns.items():
@@ -318,19 +318,25 @@ class EnterpriseOrchestrator:
                 continue
             if base_turn.stance != scenario_turn.stance:
                 shifts.append(
-                    f"{agent_name} moved from {base_turn.stance} to {scenario_turn.stance} after the scenario assumptions changed."
+                    f"{agent_name} changed its recommendation from {base_turn.stance} to {scenario_turn.stance} after the scenario assumptions changed."
                 )
             elif abs(base_turn.confidence - scenario_turn.confidence) >= 8:
                 shifts.append(
-                    f"{agent_name} kept the same stance but confidence moved from {base_turn.confidence}% to {scenario_turn.confidence}%."
+                    f"{agent_name} kept the same recommendation, but confidence changed from {base_turn.confidence}% to {scenario_turn.confidence}%."
                 )
 
         return shifts[:5] or ["The board stayed directionally consistent and mainly adjusted confidence rather than verdict."]
 
     def _difference_from_base(self, base_decision: str, scenario_decision: str, changed_agents: Iterable[str]) -> str:
         if scenario_decision == base_decision:
-            return f"Decision stayed at {base_decision}, but {len(list(changed_agents))} agents materially changed stance or confidence."
-        return f"Decision shifted from {base_decision} to {scenario_decision} because the altered assumptions changed board weighting."
+            return (
+                f"The final answer stayed at {base_decision}, but {len(list(changed_agents))} advisors "
+                "changed either their view or their confidence level."
+            )
+        return (
+            f"The final answer changed from {base_decision} to {scenario_decision} because the new assumptions "
+            "changed how the team weighed the trade-offs."
+        )
 
     def _emit(self, event_handler: Optional[Callable[[Dict[str, object]], None]], payload: Dict[str, object]) -> None:
         if event_handler:

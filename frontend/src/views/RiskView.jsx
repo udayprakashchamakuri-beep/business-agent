@@ -7,21 +7,33 @@ function RiskView({ riskMetrics, riskAlerts }) {
   const [mapView, setMapView] = useState("world");
   const [timeRange, setTimeRange] = useState("4H");
   const [selectedAlertId, setSelectedAlertId] = useState(riskAlerts[0]?.id ?? "");
-  const [lastSimulation, setLastSimulation] = useState("");
+  const [simulationResult, setSimulationResult] = useState(null);
+
+  const displayAlerts = useMemo(() => {
+    const combined = simulationResult?.alert ? [simulationResult.alert, ...riskAlerts] : riskAlerts;
+    const seen = new Set();
+    return combined.filter((alert) => {
+      if (!alert || seen.has(alert.id)) {
+        return false;
+      }
+      seen.add(alert.id);
+      return true;
+    });
+  }, [riskAlerts, simulationResult]);
 
   useEffect(() => {
-    if (!riskAlerts.length) {
+    if (!displayAlerts.length) {
       setSelectedAlertId("");
       return;
     }
-    if (!riskAlerts.some((alert) => alert.id === selectedAlertId)) {
-      setSelectedAlertId(riskAlerts[0].id);
+    if (!displayAlerts.some((alert) => alert.id === selectedAlertId)) {
+      setSelectedAlertId(displayAlerts[0].id);
     }
-  }, [riskAlerts, selectedAlertId]);
+  }, [displayAlerts, selectedAlertId]);
 
   const selectedAlert = useMemo(
-    () => riskAlerts.find((alert) => alert.id === selectedAlertId) ?? riskAlerts[0] ?? null,
-    [riskAlerts, selectedAlertId],
+    () => displayAlerts.find((alert) => alert.id === selectedAlertId) ?? displayAlerts[0] ?? null,
+    [displayAlerts, selectedAlertId],
   );
 
   const chartConfig = useMemo(() => {
@@ -46,9 +58,64 @@ function RiskView({ riskMetrics, riskAlerts }) {
     };
   }, [timeRange]);
 
+  const activeChart = simulationResult?.chart ?? chartConfig;
+  const activeStats = simulationResult?.stats ?? riskMetrics.stats;
+  const activeThreat = simulationResult?.activeThreat ?? riskMetrics.activeThreat;
+  const observation = simulationResult?.observation ?? riskMetrics.observation;
+
   const mapViewLabel =
     mapView === "world" ? "World view" : mapView === "hotspots" ? "Risk hotspots" : "Supply view";
   const zoomLabel = `${Math.round(mapZoom * 100)}%`;
+  const mapDiagram = useMemo(() => {
+    if (mapView === "hotspots") {
+      return {
+        paths: [
+          "M 110 170 C 230 110, 300 110, 410 170",
+          "M 410 170 C 520 220, 630 210, 730 130",
+        ],
+        nodes: [
+          { x: 110, y: 170, size: 10, tone: "danger" },
+          { x: 270, y: 130, size: 8, tone: "accent" },
+          { x: 410, y: 170, size: 12, tone: "danger" },
+          { x: 560, y: 210, size: 8, tone: "accent" },
+          { x: 730, y: 130, size: 10, tone: "danger" },
+        ],
+      };
+    }
+
+    if (mapView === "supply") {
+      return {
+        paths: [
+          "M 120 200 L 240 155 L 410 175 L 540 120 L 710 165",
+          "M 240 155 L 300 245 L 450 250 L 540 120",
+        ],
+        nodes: [
+          { x: 120, y: 200, size: 8, tone: "success" },
+          { x: 240, y: 155, size: 10, tone: "accent" },
+          { x: 300, y: 245, size: 8, tone: "success" },
+          { x: 410, y: 175, size: 10, tone: "accent" },
+          { x: 540, y: 120, size: 12, tone: "danger" },
+          { x: 710, y: 165, size: 8, tone: "success" },
+        ],
+      };
+    }
+
+    return {
+      paths: [
+        "M 120 150 C 220 95, 340 110, 420 180",
+        "M 420 180 C 500 240, 620 225, 710 145",
+        "M 260 260 C 330 210, 420 205, 520 245",
+      ],
+      nodes: [
+        { x: 120, y: 150, size: 8, tone: "accent" },
+        { x: 250, y: 115, size: 6, tone: "success" },
+        { x: 420, y: 180, size: 12, tone: "danger" },
+        { x: 580, y: 230, size: 8, tone: "accent" },
+        { x: 710, y: 145, size: 10, tone: "danger" },
+        { x: 320, y: 230, size: 6, tone: "success" },
+      ],
+    };
+  }, [mapView]);
 
   function zoomIn() {
     setMapZoom((current) => Math.min(1.6, Number((current + 0.15).toFixed(2))));
@@ -63,12 +130,78 @@ function RiskView({ riskMetrics, riskAlerts }) {
   }
 
   function runSimulation() {
-    setLastSimulation(
-      `The system ran a ${shockIntensity}% stress test with ${autonomyMode} advisor freedom in ${mapViewLabel.toLowerCase()}. Review the highlighted alert and trend chart for the biggest watch-outs.`,
-    );
-    if (riskAlerts.length) {
-      setSelectedAlertId(riskAlerts[0].id);
-    }
+    const simulationId = `simulation-${Date.now()}`;
+    const intensityBand = shockIntensity >= 80 ? "high" : shockIntensity >= 55 ? "medium" : "low";
+    const nextRange = intensityBand === "high" ? "1H" : intensityBand === "medium" ? "4H" : "1D";
+    const nextView = intensityBand === "high" ? "hotspots" : intensityBand === "low" ? "supply" : "world";
+    const nextZoom = intensityBand === "high" ? 1.25 : intensityBand === "low" ? 1.05 : 1.12;
+
+    setTimeRange(nextRange);
+    setMapView(nextView);
+    setMapZoom(nextZoom);
+
+    const alertTone = intensityBand === "high" ? "danger" : intensityBand === "medium" ? "accent" : "success";
+    const alertTitle =
+      intensityBand === "high"
+        ? "Stress test found a fragile launch path"
+        : intensityBand === "medium"
+          ? "Stress test found a manageable but real risk spike"
+          : "Stress test shows the plan holds up under this case";
+    const alertBody =
+      intensityBand === "high"
+        ? `This test suggests the current plan becomes fragile when market difficulty rises to ${shockIntensity}% with ${autonomyMode} advisor freedom. The business would need tighter controls before moving ahead.`
+        : intensityBand === "medium"
+          ? `This test suggests the plan can still work, but only if the team narrows the launch and watches spending carefully.`
+          : `This test suggests the current plan stays fairly steady under lighter stress, with the main watch-out being execution discipline.`;
+
+    setSimulationResult({
+      alert: {
+        id: simulationId,
+        timestamp: "Just now",
+        severity: intensityBand === "high" ? "Critical test result" : intensityBand === "medium" ? "Watch item" : "Stable test result",
+        title: alertTitle,
+        body: alertBody,
+        tone: alertTone,
+      },
+      chart:
+        intensityBand === "high"
+          ? {
+              path: "M0 165 Q 70 154, 130 168 T 250 132 T 370 152 T 510 82 T 650 58 T 800 26",
+              markerTop: "24px",
+              label: "Stress-test spike",
+            }
+          : intensityBand === "medium"
+            ? {
+                path: "M0 154 Q 80 146, 160 152 T 280 128 T 420 118 T 560 92 T 800 66",
+                markerTop: "38px",
+                label: "Scenario pressure trend",
+              }
+            : {
+                path: "M0 166 Q 100 158, 200 150 T 360 138 T 520 128 T 800 102",
+                markerTop: "60px",
+                label: "Lower-stress trend",
+              },
+      activeThreat: intensityBand === "high" ? "STRESS TEST PRESSURE" : activeThreat,
+      observation:
+        intensityBand === "high"
+          ? "LAUNCH PLAN TOO FRAGILE"
+          : intensityBand === "medium"
+            ? "NARROWER LAUNCH ADVISED"
+            : "TEST CASE HOLDS",
+      stats: [
+        { label: "Risk change", value: intensityBand === "high" ? "18.4%" : intensityBand === "medium" ? "11.6%" : "5.2%" },
+        { label: "Response speed", value: `${Math.max(10, 28 - Math.round(shockIntensity / 8))}ms` },
+        { label: "System load", value: intensityBand === "high" ? "Under strain" : intensityBand === "medium" ? "Watch" : "Healthy", tone: intensityBand === "low" ? "success" : undefined },
+        { label: "Resilience score", value: intensityBand === "high" ? "72.4" : intensityBand === "medium" ? "84.9" : "92.7" },
+      ],
+      summary:
+        intensityBand === "high"
+          ? `The system ran a severe stress test. It is highlighting a fragile launch path and showing the sharpest pressure in the risk trend and alert feed.`
+          : intensityBand === "medium"
+            ? `The system ran a medium stress test. It still sees a workable path, but only with a smaller launch and tighter controls.`
+            : `The system ran a lighter stress test. The plan stayed fairly steady, with execution discipline still the main thing to watch.`,
+    });
+    setSelectedAlertId(simulationId);
   }
 
   return (
@@ -96,11 +229,11 @@ function RiskView({ riskMetrics, riskAlerts }) {
           <div className="map-overlay map-overlay-top">
             <article className="threat-badge danger">
               <span>Main risk</span>
-              <strong>{riskMetrics.activeThreat}</strong>
+              <strong>{activeThreat}</strong>
             </article>
             <article className="threat-badge accent">
               <span>Watch item</span>
-              <strong>{riskMetrics.observation}</strong>
+              <strong>{observation}</strong>
             </article>
           </div>
 
@@ -111,6 +244,24 @@ function RiskView({ riskMetrics, riskAlerts }) {
               <div className="threat-orb orb-b" />
               <div className="threat-orb orb-c" />
               <div className="threat-grid-lines" />
+              <svg className="threat-map-svg" viewBox="0 0 800 320" preserveAspectRatio="none" aria-hidden="true">
+                {mapDiagram.paths.map((path, index) => (
+                  <path key={index} d={path} className="threat-map-path" />
+                ))}
+                {mapDiagram.nodes.map((node, index) => (
+                  <circle
+                    key={`${node.x}-${node.y}-${index}`}
+                    cx={node.x}
+                    cy={node.y}
+                    r={node.size}
+                    className={`threat-map-node tone-${node.tone}`}
+                  />
+                ))}
+              </svg>
+              <div className="threat-map-caption">
+                <strong>{mapViewLabel}</strong>
+                <span>{simulationResult?.summary ?? "The live map highlights the areas where the model sees the highest pressure right now."}</span>
+              </div>
             </div>
           </div>
 
@@ -169,7 +320,7 @@ function RiskView({ riskMetrics, riskAlerts }) {
           <div className="panel-topline">
             <div>
               <h2>Risk Trend</h2>
-              <p>{chartConfig.label}</p>
+              <p>{activeChart.label}</p>
             </div>
             <div className="legend-row">
               {["1H", "4H", "1D"].map((range) => (
@@ -186,6 +337,7 @@ function RiskView({ riskMetrics, riskAlerts }) {
           </div>
 
           <div className="volatility-chart">
+            <div className="volatility-chart-grid" aria-hidden="true" />
             <svg viewBox="0 0 800 200" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="volatilityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -194,21 +346,21 @@ function RiskView({ riskMetrics, riskAlerts }) {
                 </linearGradient>
               </defs>
               <path
-                d={chartConfig.path}
+                d={activeChart.path}
                 fill="none"
                 stroke="#ffe16d"
                 strokeWidth="2"
               />
               <path
-                d={`${chartConfig.path} L 800 200 L 0 200 Z`}
+                d={`${activeChart.path} L 800 200 L 0 200 Z`}
                 fill="url(#volatilityGradient)"
               />
             </svg>
-            <div className="volatility-marker" style={{ top: chartConfig.markerTop }} />
+            <div className="volatility-marker" style={{ top: activeChart.markerTop }} />
           </div>
 
           <div className="volatility-stats">
-            {riskMetrics.stats.map((stat) => (
+            {activeStats.map((stat) => (
               <article key={stat.label}>
                 <span>{stat.label}</span>
                 <strong className={stat.tone === "success" ? "success-text" : ""}>{stat.value}</strong>
@@ -274,7 +426,14 @@ function RiskView({ riskMetrics, riskAlerts }) {
             <button type="button" className="execute-shock" onClick={runSimulation}>
               Run this test case
             </button>
-            {lastSimulation ? <p className="sandbox-result">{lastSimulation}</p> : null}
+            {simulationResult ? (
+              <article className={`sandbox-result-card tone-${simulationResult.alert.tone}`}>
+                <strong>{simulationResult.alert.title}</strong>
+                <p>{simulationResult.summary}</p>
+              </article>
+            ) : (
+              <p className="sandbox-result">Run the scenario tester to see how the chart, alert feed, and map change under new conditions.</p>
+            )}
           </div>
         </section>
       </div>

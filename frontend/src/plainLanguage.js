@@ -46,7 +46,7 @@ export function toPlainText(value) {
     return value ?? "";
   }
 
-  return REPLACEMENTS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value)
+  return REPLACEMENTS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), rewriteMachineText(value))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -225,6 +225,119 @@ function normalizeSentence(text) {
   }
 
   return /[.!?]$/.test(clean) ? clean : `${clean}.`;
+}
+
+function rewriteMachineText(value) {
+  let text = String(value);
+
+  text = text.replace(
+    /Weighted (?:board|team) sentiment normalized to ([+-]?\d+(?:\.\d+)?), with average modeled ROI of ([+-]?\d+(?:\.\d+)?)% and payback of ([+-]?\d+(?:\.\d+)?) months\./gi,
+    (_, sentimentValue, roiValue, paybackValue) => {
+      const sentiment = describeSentiment(Number(sentimentValue));
+      const roi = Number(roiValue);
+      const payback = Number(paybackValue);
+      const returnLine =
+        roi < 0
+          ? `the current model points to a loss of about ${Math.abs(roi).toFixed(1)}%`
+          : `the current model points to about ${roi.toFixed(1)}% return`;
+      return `The team felt ${sentiment} overall. Based on the current assumptions, ${returnLine}, and it would take about ${payback.toFixed(1)} months to earn the upfront money back.`;
+    },
+  );
+
+  text = text.replace(
+    /The board landed on (GO|MODIFY|NO GO) because (.+?) carried the strongest aligned influence signal, while (.+?) shaped the operating conditions around that conclusion\. (.+)/gi,
+    (_, decision, lead, others, conflict) =>
+      `The team ended up at ${formatDecisionPhrase(decision)} mainly because ${lead} had the strongest influence. ${others} helped shape the conditions around that choice. ${normalizeSentence(conflict)}`,
+  );
+
+  text = text.replace(
+    /The team ended up at (GO|MODIFY|NO GO) mainly because (.+?) had the strongest influence, while (.+?) helped shape the conditions and trade-offs around that choice\. (.+)/gi,
+    (_, decision, lead, others, conflict) =>
+      `The team ended up at ${formatDecisionPhrase(decision)} mainly because ${lead} had the strongest influence. ${others} helped shape the conditions around that choice. ${normalizeSentence(conflict)}`,
+  );
+
+  text = text.replace(
+    /The heaviest disagreement centered on (.+?)\./gi,
+    (_, topic) => `The biggest disagreement was about ${topic}.`,
+  );
+
+  text = text.replace(
+    /Decision shifted from (GO|MODIFY|NO GO) to (GO|MODIFY|NO GO) because the (?:altered|new) assumptions changed (?:board|team) weighting\./gi,
+    (_, fromDecision, toDecision) =>
+      `After the assumptions changed, the final answer moved from ${formatDecisionPhrase(fromDecision)} to ${formatDecisionPhrase(toDecision)}.`,
+  );
+
+  text = text.replace(
+    /The final answer changed from (GO|MODIFY|NO GO) to (GO|MODIFY|NO GO) because the new assumptions changed how the team weighed the trade-offs\./gi,
+    (_, fromDecision, toDecision) =>
+      `After the assumptions changed, the final answer moved from ${formatDecisionPhrase(fromDecision)} to ${formatDecisionPhrase(toDecision)}.`,
+  );
+
+  text = text.replace(
+    /Decision stayed at (GO|MODIFY|NO GO), but (\d+) agents materially changed stance or confidence\./gi,
+    (_, decision, count) =>
+      `The final answer stayed at ${formatDecisionPhrase(decision)}, but ${count} advisors changed either their view or their confidence level.`,
+  );
+
+  text = text.replace(
+    /The final answer stayed at (GO|MODIFY|NO GO), but (\d+) advisors changed either their view or their confidence level\./gi,
+    (_, decision, count) =>
+      `The final answer stayed at ${formatDecisionPhrase(decision)}, but ${count} advisors changed either their view or their confidence level.`,
+  );
+
+  text = text.replace(
+    /Top influence shifted from (.+?) to (.+?) under the new assumptions\./gi,
+    (_, fromAgent, toAgent) => `The most influential advisor changed from ${fromAgent} to ${toAgent} in this scenario.`,
+  );
+
+  text = text.replace(
+    /The most influential advisor changed from (.+?) to (.+?) in this scenario\./gi,
+    (_, fromAgent, toAgent) => `The most influential advisor changed from ${fromAgent} to ${toAgent} in this scenario.`,
+  );
+
+  text = text.replace(
+    /(.+?) moved from (GO|MODIFY|NO GO) to (GO|MODIFY|NO GO) after the scenario assumptions changed\./gi,
+    (_, agent, fromDecision, toDecision) =>
+      `${agent} changed its recommendation from ${formatDecisionPhrase(fromDecision)} to ${formatDecisionPhrase(toDecision)} in this scenario.`,
+  );
+
+  text = text.replace(
+    /(.+?) kept the same stance but confidence moved from (\d+)% to (\d+)%\./gi,
+    (_, agent, fromConfidence, toConfidence) =>
+      `${agent} kept the same overall view, but confidence changed from ${fromConfidence}% to ${toConfidence}%.`,
+  );
+
+  text = text.replace(/\bboard-level veto\b/gi, "strong stop signal from the team");
+  return text;
+}
+
+function describeSentiment(value) {
+  if (value >= 0.18) {
+    return "mostly positive";
+  }
+  if (value >= 0.05) {
+    return "slightly positive";
+  }
+  if (value > -0.05) {
+    return "mixed";
+  }
+  if (value > -0.18) {
+    return "slightly cautious";
+  }
+  return "strongly cautious";
+}
+
+function formatDecisionPhrase(value) {
+  if (value === "GO") {
+    return "launch now";
+  }
+  if (value === "MODIFY") {
+    return "move forward with changes";
+  }
+  if (value === "NO GO") {
+    return "hold off for now";
+  }
+  return String(value).toLowerCase();
 }
 
 function formatCurrency(value) {
