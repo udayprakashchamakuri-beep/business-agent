@@ -11,6 +11,7 @@ uvicorn.out.log
 backend/memory/persistent_history.json
 backend/security/auth.sqlite3
 backend/security/*.sqlite3
+backend/autonomy/*.db
 
 python-3.11.9-amd64.exe
 python-3.11.9-embed-amd64.zip
