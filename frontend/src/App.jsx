@@ -1452,18 +1452,12 @@ function isBusinessDecisionPrompt(message, form = {}) {
     /\bcelebrity\b/,
   ];
 
-  const formText = [form.company_name, form.industry, form.objectives, form.current_constraints]
-    .flat()
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  if (businessSignals.some((signal) => text.includes(signal) || formText.includes(signal))) {
-    return true;
-  }
-
   if (generalKnowledgePatterns.some((pattern) => pattern.test(text))) {
     return false;
+  }
+
+  if (businessSignals.some((signal) => text.includes(signal))) {
+    return true;
   }
 
   return /\bshould we\b|\bcan this work\b|\bhow risky\b|\bhow should\b|\bbest way to launch\b|\bbusiness plan\b|\bpricing plan\b/.test(
