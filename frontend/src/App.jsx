@@ -4,6 +4,7 @@ import CommandConsoleDrawer from "./components/CommandConsoleDrawer";
 import { AGENT_META, API_BASE, API_BASE_CANDIDATES, DEMO_CASES, NAV_ITEMS, defaultTimeline } from "./dashboardData";
 import { formatDecisionLabel, toPlainText } from "./plainLanguage";
 import AgentsView from "./views/AgentsView";
+import AutomationView from "./views/AutomationView";
 import IntelligenceView from "./views/IntelligenceView";
 import RiskView from "./views/RiskView";
 import SimulationView from "./views/SimulationView";
@@ -720,6 +721,16 @@ function App() {
               />
             ) : null}
 
+            {activeView === "automation" ? (
+              <AutomationView
+                scenarioTitle={scenarioTitle}
+                autonomyStatus={autonomyStatus}
+                autonomyBusy={autonomyBusy}
+                autonomyError={autonomyError}
+                onRunAutonomy={runAutonomyCycle}
+              />
+            ) : null}
+
             {activeView === "agents" ? (
               <AgentsView
                 agentCards={agentCards}
@@ -830,7 +841,17 @@ function UtilityPanel({ mode, activeView, loading, conversationAgentNames, selec
           <div className="utility-grid">
             <article className="utility-card">
               <h3>Current page</h3>
-              <p>{activeView === "simulation" ? "Discussion" : activeView === "intelligence" ? "Overview" : activeView === "agents" ? "Team" : "Risks"}</p>
+              <p>
+                {activeView === "simulation"
+                  ? "Discussion"
+                  : activeView === "intelligence"
+                    ? "Overview"
+                    : activeView === "automation"
+                      ? "Automation"
+                      : activeView === "agents"
+                        ? "Team"
+                        : "Risks"}
+              </p>
             </article>
             <article className="utility-card">
               <h3>Review state</h3>

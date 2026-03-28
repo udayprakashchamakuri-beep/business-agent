@@ -2401,6 +2401,107 @@ a {
   border-color: rgba(255, 180, 171, 0.4);
 }
 
+.automation-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.automation-status-panel,
+.automation-action-panel {
+  grid-column: span 7;
+}
+
+.automation-watch-panel,
+.automation-task-panel {
+  grid-column: span 5;
+}
+
+.automation-status-panel,
+.automation-watch-panel,
+.automation-action-panel,
+.automation-task-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.automation-status-stack {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.automation-status-item,
+.automation-run-item,
+.automation-watch-card,
+.automation-task-item {
+  display: grid;
+  gap: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 13, 31, 0.62);
+  padding: 12px 14px;
+}
+
+.automation-status-item span,
+.automation-run-item span,
+.automation-watch-card small,
+.automation-task-item span,
+.automation-action-item small {
+  color: rgba(220, 225, 251, 0.66);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.automation-status-item strong,
+.automation-run-item strong,
+.automation-watch-card strong,
+.automation-task-item strong {
+  margin: 0;
+  color: #dde3eb;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.automation-runs,
+.automation-action-log,
+.automation-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.automation-runs h3 {
+  margin: 4px 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(193, 199, 207, 0.56);
+}
+
+.automation-run-item div,
+.automation-watch-head,
+.automation-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.automation-run-item p,
+.automation-watch-card p,
+.automation-task-item p,
+.automation-action-item p {
+  margin: 0;
+  color: rgba(220, 225, 251, 0.84);
+  line-height: 1.45;
+}
+
+.automation-action-head .status-chip {
+  flex: 0 0 auto;
+}
+
 .timeline-panel {
   margin-top: 24px;
 }
@@ -3909,6 +4010,7 @@ a {
   }
 
   .intelligence-grid,
+  .automation-grid,
   .agent-detail-grid,
   .matrix-bottom-grid,
   .risk-grid {
@@ -3955,6 +4057,7 @@ a {
 
   .metric-strip,
   .side-nav-links,
+  .automation-status-stack,
   .agent-matrix-grid,
   .agent-detail-grid,
   .risk-kpi-grid,
