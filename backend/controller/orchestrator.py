@@ -27,6 +27,7 @@ from backend.controller.schemas import (
 from backend.debate_engine.engine import DebateEngine, DebateResult
 from backend.memory.manager import MemoryManager
 from backend.security.auth import build_scoped_memory_key
+from backend.services.featherless_client import FeatherlessClient
 
 
 class EnterpriseOrchestrator:
@@ -38,6 +39,7 @@ class EnterpriseOrchestrator:
         self.decision_engine = DecisionEngine()
         self.action_engine = ActionEngine()
         self.explainability_engine = ExplainabilityEngine()
+        self.featherless_client = FeatherlessClient()
 
     def analyze(self, request: AnalyzeRequest, user_id: str) -> AnalyzeResponse:
         return self._run_analysis(request=request, user_id=user_id)
@@ -159,6 +161,12 @@ class EnterpriseOrchestrator:
         if not text:
             return False
 
+        classified = self.featherless_client.classify_prompt_kind(request.business_problem)
+        if classified == "BUSINESS":
+            return True
+        if classified == "GENERAL":
+            return False
+
         general_patterns = [
             "who is",
             "what is",
@@ -235,11 +243,12 @@ class EnterpriseOrchestrator:
         active_definitions,
         active_agents,
     ) -> AnalyzeResponse:
-        response_agent = active_agents[0] if active_agents else self.agents[0]
-        response_definition = response_agent.profile.definition
-        guidance_message = (
-            "This demo is built for business decisions, not general biography or trivia questions. "
-            "Ask about a business idea, pricing, market demand, launch risk, hiring, or growth strategy and the advisors will help."
+        direct_answer = self.featherless_client.answer_general_prompt(
+            prompt=request.business_problem,
+            fallback=(
+                "This demo is mainly built for business decisions. For a general question like this, "
+                "please try again in a moment or ask a business-focused question."
+            ),
         )
         sample_prompts = [
             "Should I open a game center near a college?",
@@ -247,15 +256,15 @@ class EnterpriseOrchestrator:
             "How risky is it to launch with only 8 months of cash left?",
         ]
         turn = AgentTurn(
-            agent_name=response_definition.name,
-            role=response_definition.role,
+            agent_name="General Assistant",
+            role="Direct model answer",
             round=1,
             scenario_name=request.scenario_name,
-            message=guidance_message,
+            message=direct_answer,
             stance="MODIFY",
             confidence=94,
-            topics=["question fit"],
-            key_points=["Ask a business question", "Include your idea, market, cost, or risk"],
+            topics=["general answer"],
+            key_points=["Answered directly with the language model"],
             assumptions=[],
             references=[],
             challenged_agents=[],
@@ -268,13 +277,13 @@ class EnterpriseOrchestrator:
         )
         return AnalyzeResponse(
             company_name=request.company_name or "Business decision review",
-            agent_definitions=[response_definition],
+            agent_definitions=active_definitions,
             conversation=[turn],
             round_summaries=[
                 RoundSummary(
                     round=1,
-                    synopsis="The latest prompt is outside the business-advice scope of this demo.",
-                    consensus_points=["The app redirected the user to a business-focused prompt."],
+                    synopsis="The latest prompt was answered directly because it is not a business-advice request.",
+                    consensus_points=["The app used the language model directly instead of the business advisory debate."],
                     conflict_points=[],
                     open_questions=sample_prompts,
                     numeric_highlights={"average_confidence": 94},
@@ -285,10 +294,10 @@ class EnterpriseOrchestrator:
                 decision="MODIFY",
                 confidence=94,
                 key_reasons=[
-                    "This demo works best when the question is about a business decision or startup plan.",
-                    f'The latest prompt looked like a general question: "{request.business_problem[:120]}"',
+                    "This prompt was treated as a general question instead of a business case.",
+                    "The system used the language model directly to answer it.",
                 ],
-                risks=["General-knowledge prompts produce weak advisor output because this app is tuned for business cases."],
+                risks=["If you want advisor debate, ask a business question about launch, pricing, demand, costs, risks, or growth."],
                 recommended_actions=sample_prompts,
             ),
             actions=ActionPlan(
@@ -310,18 +319,17 @@ class EnterpriseOrchestrator:
             ),
             scenario_results=[],
             explainability=ExplainabilityReport(
-                top_influencer=response_definition.name,
+                top_influencer="General Assistant",
                 conflicts=[],
                 final_reasoning_summary=(
-                    "The request was redirected because it looks like a general question instead of a business decision. "
-                    "The app is guiding the user toward a better prompt."
+                    "The request was classified as a general question, so the app skipped the advisor debate and returned a direct model answer."
                 ),
                 reasoning_trace=[
                     ReasoningTraceItem(
-                        agent_name=response_definition.name,
+                        agent_name="General Assistant",
                         influence_score=1.0,
                         stance="MODIFY",
-                        summary=guidance_message,
+                        summary="The language model answered directly because the prompt was not a business-decision request.",
                     )
                 ],
             ),

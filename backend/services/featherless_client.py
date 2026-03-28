@@ -24,10 +24,64 @@ class FeatherlessClient:
         if not self.is_configured():
             return fallback
 
+        return self._chat_completion(
+            system_prompt=system_prompt,
+            prompt=prompt,
+            fallback=fallback,
+            temperature=0.25,
+            max_tokens=260,
+        )
+
+    def classify_prompt_kind(self, prompt: str) -> Optional[str]:
+        if not self.is_configured():
+            return None
+
+        content = self._chat_completion(
+            system_prompt=(
+                "You classify whether a user prompt is asking for business advice or not. "
+                "Reply with exactly one word: BUSINESS or GENERAL."
+            ),
+            prompt=(
+                "Classify this prompt.\n"
+                "BUSINESS = business decision, startup, pricing, launch, market, revenue, hiring, growth, costs, risk, or operations.\n"
+                "GENERAL = biography, trivia, school knowledge, history, definitions, or anything not asking for business advice.\n\n"
+                f"Prompt: {prompt}"
+            ),
+            fallback="",
+            temperature=0,
+            max_tokens=4,
+        ).strip().upper()
+        if content in {"BUSINESS", "GENERAL"}:
+            return content
+        return None
+
+    def answer_general_prompt(self, prompt: str, fallback: str) -> str:
+        if not self.is_configured():
+            return fallback
+
+        return self._chat_completion(
+            system_prompt=(
+                "You are a helpful general assistant. Answer clearly in normal human language. "
+                "Keep the answer concise but useful. Do not turn it into business advice unless the user asks for that."
+            ),
+            prompt=prompt,
+            fallback=fallback,
+            temperature=0.3,
+            max_tokens=260,
+        )
+
+    def _chat_completion(
+        self,
+        system_prompt: str,
+        prompt: str,
+        fallback: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
         payload = {
             "model": self.model,
-            "temperature": 0.25,
-            "max_tokens": 260,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},

@@ -8,6 +8,30 @@ import {
   toPlainText,
 } from "../plainLanguage";
 
+function getConversationMeta(agentMeta, name) {
+  if (agentMeta[name]) {
+    return agentMeta[name];
+  }
+
+  if (name === "General Assistant") {
+    return {
+      accent: "#7be7d4",
+      symbol: "smart_toy",
+      label: "General Assistant",
+      title: "Direct model answer",
+      boardRole: "Direct model answer",
+    };
+  }
+
+  return {
+    accent: "#9ac9ff",
+    symbol: "smart_toy",
+    label: String(name || "Assistant").replace(" Agent", ""),
+    title: "Direct answer",
+    boardRole: "Direct answer",
+  };
+}
+
 function SimulationView({
   agentMeta,
   result,
@@ -42,9 +66,9 @@ function SimulationView({
   onClearAgentConversation,
 }) {
   const conversationEndRef = useRef(null);
-  const speakingMeta = agentMeta[speakingAgent] ?? agentMeta["CEO Agent"];
+  const speakingMeta = getConversationMeta(agentMeta, speakingAgent);
   const activeConversationMeta =
-    conversationAgentNames.length === 1 ? agentMeta[conversationAgentNames[0]] ?? agentMeta["CEO Agent"] : null;
+    conversationAgentNames.length === 1 ? getConversationMeta(agentMeta, conversationAgentNames[0]) : null;
   const filteredRounds = conversationAgentNames.length
     ? groupedConversation
         .map(([round, turns]) => [round, turns.filter((turn) => conversationAgentNames.includes(turn.agent_name))])
@@ -71,6 +95,9 @@ function SimulationView({
   const chatTargetLabels = focusedAgentNames.map((name) => agentMeta[name]?.label ?? name);
   const showingFocusedReplies = conversationAgentNames.length > 0;
   const shouldShowFocusedReplyBadge = shouldShowAdvisorStanceBadge(latestUserMessage?.content ?? "");
+  const isDirectAnswerThread =
+    (result?.conversation?.length ?? 0) > 0 && result.conversation.every((turn) => turn.agent_name === "General Assistant");
+  const directAnswerText = toPlainText(result?.conversation?.[0]?.message ?? "The model will answer directly here.");
 
   useEffect(() => {
     if (!conversationEndRef.current) {
@@ -297,7 +324,7 @@ function SimulationView({
                   </div>
 
                   {advisorReplyTurns.map((turn) => {
-                    const meta = agentMeta[turn.agent_name] ?? agentMeta["CEO Agent"];
+                    const meta = getConversationMeta(agentMeta, turn.agent_name);
                     const stanceClassName = getStanceClassName(turn.stance);
 
                     return (
@@ -317,7 +344,7 @@ function SimulationView({
                           <div className={turn.stance === "NO GO" ? "message-bubble danger" : "message-bubble"}>
                             {buildDirectAdvisorReply(turn, latestUserMessage?.content ?? "")}
                           </div>
-                          {shouldShowFocusedReplyBadge ? (
+                          {shouldShowFocusedReplyBadge && turn.agent_name !== "General Assistant" ? (
                             <div className="message-tags">
                               <span className={`message-tag ${stanceClassName}`}>{formatAdvisorStanceLabel(turn.stance)}</span>
                             </div>
@@ -356,7 +383,7 @@ function SimulationView({
                   ) : null}
 
                   {turns.map((turn) => {
-                    const meta = agentMeta[turn.agent_name] ?? agentMeta["CEO Agent"];
+                    const meta = getConversationMeta(agentMeta, turn.agent_name);
                     const stanceClassName = getStanceClassName(turn.stance);
 
                     return (
@@ -374,11 +401,13 @@ function SimulationView({
                             <span className="message-time">Round {turn.round}</span>
                           </div>
                           <div className={turn.stance === "NO GO" ? "message-bubble danger" : "message-bubble"}>
-                            {buildRoundSummary(turn)}
+                            {turn.agent_name === "General Assistant" ? toPlainText(turn.message) : buildRoundSummary(turn)}
                           </div>
-                          <div className="message-tags">
-                            <span className={`message-tag ${stanceClassName}`}>{formatDecisionLabel(turn.stance)}</span>
-                          </div>
+                          {turn.agent_name !== "General Assistant" ? (
+                            <div className="message-tags">
+                              <span className={`message-tag ${stanceClassName}`}>{formatDecisionLabel(turn.stance)}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </article>
                     );
@@ -471,109 +500,145 @@ function SimulationView({
         <aside className="obsidian-insights">
           <div className="directive-card">
             <div className="directive-mark">
-              <span className="material-symbols-outlined">gavel</span>
+              <span className="material-symbols-outlined">{isDirectAnswerThread ? "smart_toy" : "gavel"}</span>
             </div>
-            <h2>Final Recommendation</h2>
+            <h2>{isDirectAnswerThread ? "Direct Answer" : "Final Recommendation"}</h2>
             <div className="directive-body">
               <p className="directive-title">
-                {result?.final_output
+                {isDirectAnswerThread
+                  ? directAnswerText
+                  : result?.final_output
                   ? `${formatDecisionLabel(result.final_output.decision)}: ${toPlainText(recommendedDirective)}`
                   : "Waiting for the team to finish its review"}
               </p>
-              <div className="directive-score">
-                <div>
-                  <span>Confidence</span>
-                  <strong>{result?.final_output?.confidence ?? 0}%</strong>
+              {!isDirectAnswerThread ? (
+                <div className="directive-score">
+                  <div>
+                    <span>Confidence</span>
+                    <strong>{result?.final_output?.confidence ?? 0}%</strong>
+                  </div>
+                  <div className="meter-track">
+                    <div className="meter-fill" style={{ width: `${result?.final_output?.confidence ?? 0}%` }} />
+                  </div>
                 </div>
-                <div className="meter-track">
-                  <div className="meter-fill" style={{ width: `${result?.final_output?.confidence ?? 0}%` }} />
-                </div>
-              </div>
+              ) : null}
             </div>
           </div>
 
           <section className="insight-section">
-            <h3>Main Reasons And Risks</h3>
+            <h3>{isDirectAnswerThread ? "About This Answer" : "Main Reasons And Risks"}</h3>
             <div className="insight-grid">
               <InsightCard
-                icon="lightbulb"
+                icon={isDirectAnswerThread ? "info" : "lightbulb"}
                 accent="#ddb7ff"
-                title="Main Reason"
-                body={toPlainText(result?.final_output?.key_reasons?.[0] ?? "The team is waiting to review your case.")}
+                title={isDirectAnswerThread ? "Why you got this answer" : "Main Reason"}
+                body={toPlainText(
+                  result?.final_output?.key_reasons?.[0] ??
+                    (isDirectAnswerThread
+                      ? "The prompt was handled as a general question instead of a business case."
+                      : "The team is waiting to review your case."),
+                )}
               />
               <InsightCard
-                icon="dangerous"
+                icon={isDirectAnswerThread ? "tips_and_updates" : "dangerous"}
                 accent="#ff8f8f"
-                title="Biggest Risk"
+                title={isDirectAnswerThread ? "Tip" : "Biggest Risk"}
                 body={toPlainText(highestRisk)}
-                kicker={result?.final_output?.risks?.length ? "Critical" : ""}
+                kicker={!isDirectAnswerThread && result?.final_output?.risks?.length ? "Critical" : ""}
               />
               <InsightCard
-                icon="account_balance"
+                icon={isDirectAnswerThread ? "forum" : "account_balance"}
                 accent="#00ff94"
-                title="Best Next Step"
+                title={isDirectAnswerThread ? "Try this next" : "Best Next Step"}
                 body={toPlainText(result?.final_output?.recommended_actions?.[0] ?? "No action steps yet.")}
               />
             </div>
           </section>
 
           <section className="health-panel">
-            <h3>Action Plan</h3>
-            <div className="execution-list">
-              {(actionPlan?.execution_plan ?? []).slice(0, 4).map((step, index) => (
-                <div key={`${step.owner}-${index}`} className="execution-item">
-                  <strong>{step.timeline}</strong>
-                  <div>
-                    <p>{toPlainText(step.step)}</p>
-                    <span>
-                      {step.owner} - {toPlainText(step.success_metric)}
-                    </span>
+            <h3>{isDirectAnswerThread ? "Suggested Business Prompts" : "Action Plan"}</h3>
+            {isDirectAnswerThread ? (
+              <div className="execution-list">
+                {(result?.final_output?.recommended_actions ?? []).slice(0, 4).map((prompt, index) => (
+                  <div key={`${prompt}-${index}`} className="execution-item">
+                    <strong>{index === 0 ? "Try now" : "Example"}</strong>
+                    <div>
+                      <p>{toPlainText(prompt)}</p>
+                      <span>Use one of these if you want the advisor team to debate a business case.</span>
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="execution-list">
+                  {(actionPlan?.execution_plan ?? []).slice(0, 4).map((step, index) => (
+                    <div key={`${step.owner}-${index}`} className="execution-item">
+                      <strong>{step.timeline}</strong>
+                      <div>
+                        <p>{toPlainText(step.step)}</p>
+                        <span>
+                          {step.owner} - {toPlainText(step.success_metric)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {!actionPlan?.execution_plan?.length ? (
+                    <p className="compact-placeholder">Action steps will appear after the team makes a recommendation.</p>
+                  ) : null}
                 </div>
-              ))}
-              {!actionPlan?.execution_plan?.length ? (
-                <p className="compact-placeholder">Action steps will appear after the team makes a recommendation.</p>
-              ) : null}
-            </div>
-            <div className="scenario-grid">
-              {(scenarioResults ?? []).map((scenario) => (
-                <article key={scenario.scenario} className="scenario-card">
-                  <div className="scenario-card-top">
-                    <strong>{scenario.scenario}</strong>
-                    <span>{formatDecisionLabel(scenario.decision)}</span>
-                  </div>
-                  <p>{toPlainText(scenario.difference_from_base)}</p>
-                  <small>{toPlainText(scenario.reasoning_shift?.[0] ?? "The recommendation stayed mostly the same.")}</small>
-                </article>
-              ))}
-            </div>
+                <div className="scenario-grid">
+                  {(scenarioResults ?? []).map((scenario) => (
+                    <article key={scenario.scenario} className="scenario-card">
+                      <div className="scenario-card-top">
+                        <strong>{scenario.scenario}</strong>
+                        <span>{formatDecisionLabel(scenario.decision)}</span>
+                      </div>
+                      <p>{toPlainText(scenario.difference_from_base)}</p>
+                      <small>{toPlainText(scenario.reasoning_shift?.[0] ?? "The recommendation stayed mostly the same.")}</small>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
 
           <section className="health-panel">
-            <h3>Why This Recommendation Was Made</h3>
+            <h3>{isDirectAnswerThread ? "Why The Advisor Team Was Skipped" : "Why This Recommendation Was Made"}</h3>
             <div className="health-block">
               <div className="health-meta">
-                <span>Most influential advisor</span>
+                <span>{isDirectAnswerThread ? "Answered by" : "Most influential advisor"}</span>
                 <span>{explainability?.top_influencer ?? "Pending"}</span>
               </div>
               <p className="insight-paragraph">
                 {toPlainText(
                   explainability?.final_reasoning_summary ??
-                    "The team will summarize why it reached this recommendation.",
+                    (isDirectAnswerThread
+                      ? "The model handled this as a general question instead of a business case."
+                      : "The team will summarize why it reached this recommendation."),
                 )}
               </p>
             </div>
             <div className="health-block">
-              <div className="health-meta">
-                <span>Past similar cases</span>
-                <span>{memorySummary?.recalled_simulations ?? 0}</span>
-              </div>
-              <p className="insight-paragraph">
-                {toPlainText(
-                  memorySummary?.prior_failures?.[0] ??
-                    "The system can save past cases and use them in future recommendations.",
-                )}
-              </p>
+              {isDirectAnswerThread ? (
+                <p className="insight-paragraph">
+                  Ask about launch timing, pricing, customers, costs, risk, hiring, or growth if you want the full
+                  advisor debate.
+                </p>
+              ) : (
+                <>
+                  <div className="health-meta">
+                    <span>Past similar cases</span>
+                    <span>{memorySummary?.recalled_simulations ?? 0}</span>
+                  </div>
+                  <p className="insight-paragraph">
+                    {toPlainText(
+                      memorySummary?.prior_failures?.[0] ??
+                        "The system can save past cases and use them in future recommendations.",
+                    )}
+                  </p>
+                </>
+              )}
             </div>
             <div className="health-block">
               <div className="health-meta">

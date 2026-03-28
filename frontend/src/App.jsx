@@ -106,6 +106,7 @@ function App() {
   }, [result]);
 
   const conversation = result?.conversation ?? [];
+  const isDirectAnswerMode = conversation.length > 0 && conversation.every((turn) => turn.agent_name === "General Assistant");
   const timeline = result?.round_summaries?.length ? result.round_summaries : defaultTimeline;
   const activeTypingAgent = availableTypingAgents[typingIndex % availableTypingAgents.length];
   const lastTurn = conversation[conversation.length - 1] ?? null;
@@ -151,12 +152,6 @@ function App() {
     setActiveView("simulation");
     setFocusedAgentNames(focusAgentNames);
     setSelectedAgentName(focusAgentNames[0] || "CEO Agent");
-
-    if (!isBusinessDecisionPrompt(payload.business_problem, payload)) {
-      setResult(buildNonBusinessPromptResult(payload.business_problem, payload.selected_agent_names ?? []));
-      setLoading(false);
-      return;
-    }
 
     try {
       setResult(createEmptyResult(payload.company_name));
@@ -267,17 +262,6 @@ function App() {
       return;
     }
 
-    if (!isBusinessDecisionPrompt(problemText, normalizedForm)) {
-      setForm(normalizedForm);
-      setChatMessages(formChatMessages);
-      setChatDraft("");
-      setFocusedAgentNames([]);
-      setError("");
-      setActiveView("simulation");
-      setResult(buildNonBusinessPromptResult(problemText));
-      return;
-    }
-
     setForm(normalizedForm);
     setChatMessages(formChatMessages);
     setChatDraft("");
@@ -294,16 +278,6 @@ function App() {
 
     const nextMessages = [...chatMessages, createChatMessage(trimmedMessage, focusedAgentNames)];
     const derivedForm = deriveFormFromChat(form, nextMessages);
-
-    if (!isBusinessDecisionPrompt(trimmedMessage, derivedForm)) {
-      setChatMessages(nextMessages);
-      setChatDraft("");
-      setForm(derivedForm);
-      setError("");
-      setActiveView("simulation");
-      setResult(buildNonBusinessPromptResult(trimmedMessage, focusedAgentNames));
-      return;
-    }
 
     setChatMessages(nextMessages);
     setChatDraft("");
@@ -594,7 +568,7 @@ function App() {
           onSubmitChat={handleQuickChatSubmit}
           onToggleFocusedAgent={toggleFocusedAgent}
           onSelectOnlyFocusedAgent={selectOnlyFocusedAgent}
-          conversationAgentNames={focusedAgentNames}
+          conversationAgentNames={isDirectAnswerMode ? [] : focusedAgentNames}
           onOpenAgentConversation={openAgentConversation}
           onOpenAgentProfile={openAgentProfile}
           onClearAgentConversation={clearAgentConversation}
@@ -1503,7 +1477,7 @@ function mergeStreamEvent(current, eventPayload) {
 }
 
 function buildNonBusinessPromptResult(message, selectedAgentNames = []) {
-  const addressedAgents = selectedAgentNames.length ? selectedAgentNames : ["CEO Agent"];
+  const addressedAgents = ["General Assistant"];
   const samplePrompts = [
     "Should I open a game center near a college?",
     "What pricing model should I use for my tutoring startup?",
@@ -1517,7 +1491,7 @@ function buildNonBusinessPromptResult(message, selectedAgentNames = []) {
     agent_definitions: [],
     conversation: addressedAgents.map((agentName) => ({
       agent_name: agentName,
-      role: (AGENT_META[agentName] ?? AGENT_META["CEO Agent"]).boardRole,
+      role: "Direct model answer",
       round: 1,
       scenario_name: "Base Scenario",
       message: redirectMessage,
@@ -1589,7 +1563,7 @@ function buildNonBusinessPromptResult(message, selectedAgentNames = []) {
         "The request was redirected because it looks like a general question instead of a business decision. The app is now guiding the user toward a better prompt.",
       reasoning_trace: [
         {
-          agent_name: addressedAgents[0],
+          agent_name: "General Assistant",
           influence_score: 1,
           stance: "MODIFY",
           summary: redirectMessage,
