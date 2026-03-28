@@ -195,8 +195,8 @@ function App() {
     for (const base of apiBaseCandidates) {
       try {
         const response = await fetchWithRetry(`${base}${path}`, options, fetchOptions);
-        if ([502, 503, 504].includes(response.status)) {
-          lastError = new Error(`Temporary server error from ${base}.`);
+        if ([404, 502, 503, 504].includes(response.status)) {
+          lastError = new Error(`Upstream mismatch from ${base}.`);
           continue;
         }
         if (base !== apiBase) {
