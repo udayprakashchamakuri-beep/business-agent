@@ -261,6 +261,17 @@ function App() {
       return;
     }
 
+    if (!isBusinessDecisionPrompt(problemText, normalizedForm)) {
+      setForm(normalizedForm);
+      setChatMessages(formChatMessages);
+      setChatDraft("");
+      setFocusedAgentNames([]);
+      setError("");
+      setActiveView("simulation");
+      setResult(buildNonBusinessPromptResult(problemText));
+      return;
+    }
+
     setForm(normalizedForm);
     setChatMessages(formChatMessages);
     setChatDraft("");
@@ -277,6 +288,16 @@ function App() {
 
     const nextMessages = [...chatMessages, createChatMessage(trimmedMessage, focusedAgentNames)];
     const derivedForm = deriveFormFromChat(form, nextMessages);
+
+    if (!isBusinessDecisionPrompt(trimmedMessage, derivedForm)) {
+      setChatMessages(nextMessages);
+      setChatDraft("");
+      setForm(derivedForm);
+      setError("");
+      setActiveView("simulation");
+      setResult(buildNonBusinessPromptResult(trimmedMessage, focusedAgentNames));
+      return;
+    }
 
     setChatMessages(nextMessages);
     setChatDraft("");
@@ -1373,6 +1394,83 @@ async function fetchWithRetry(url, options, { timeoutMs = 12000, retries = 0 } =
   throw lastError ?? new Error("Request failed.");
 }
 
+function isBusinessDecisionPrompt(message, form = {}) {
+  const text = String(message || "").toLowerCase();
+  if (!text.trim()) {
+    return false;
+  }
+
+  const businessSignals = [
+    "business",
+    "startup",
+    "company",
+    "launch",
+    "market",
+    "customer",
+    "pricing",
+    "price",
+    "revenue",
+    "sales",
+    "profit",
+    "margin",
+    "cash",
+    "runway",
+    "growth",
+    "hire",
+    "hiring",
+    "invest",
+    "investment",
+    "risk",
+    "expand",
+    "expansion",
+    "store",
+    "shop",
+    "cafe",
+    "restaurant",
+    "gym",
+    "game center",
+    "college",
+    "break even",
+    "subscription",
+    "product",
+    "service",
+    "cost",
+    "buyer",
+    "competitor",
+  ];
+  const generalKnowledgePatterns = [
+    /\bwho is\b/,
+    /\bwhat is\b/,
+    /\bwhen was\b/,
+    /\bwhere is\b/,
+    /\btell me about\b/,
+    /\bbiography\b/,
+    /\bnet worth\b/,
+    /\bpresident\b/,
+    /\bactor\b/,
+    /\bsinger\b/,
+    /\bcelebrity\b/,
+  ];
+
+  const formText = [form.company_name, form.industry, form.objectives, form.current_constraints]
+    .flat()
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (businessSignals.some((signal) => text.includes(signal) || formText.includes(signal))) {
+    return true;
+  }
+
+  if (generalKnowledgePatterns.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+
+  return /\bshould we\b|\bcan this work\b|\bhow risky\b|\bhow should\b|\bbest way to launch\b|\bbusiness plan\b|\bpricing plan\b/.test(
+    text,
+  );
+}
+
 function mergeStreamEvent(current, eventPayload) {
   switch (eventPayload.type) {
     case "turn":
@@ -1402,6 +1500,116 @@ function mergeStreamEvent(current, eventPayload) {
     default:
       return current;
   }
+}
+
+function buildNonBusinessPromptResult(message, selectedAgentNames = []) {
+  const addressedAgents = selectedAgentNames.length ? selectedAgentNames : ["CEO Agent"];
+  const samplePrompts = [
+    "Should I open a game center near a college?",
+    "What pricing model should I use for my tutoring startup?",
+    "How risky is it to launch with only 8 months of cash left?",
+  ];
+  const redirectMessage =
+    "This demo is built for business decisions, not general biography or trivia questions. Ask about a business idea, pricing, market demand, launch risk, hiring, or growth strategy and the advisors will help.";
+
+  return {
+    company_name: "Business decision review",
+    agent_definitions: [],
+    conversation: addressedAgents.map((agentName) => ({
+      agent_name: agentName,
+      role: (AGENT_META[agentName] ?? AGENT_META["CEO Agent"]).boardRole,
+      round: 1,
+      scenario_name: "Base Scenario",
+      message: redirectMessage,
+      stance: "MODIFY",
+      confidence: 94,
+      topics: ["question fit"],
+      key_points: ["Ask a business question", "Include your idea, market, cost, or risk"],
+      assumptions: [],
+      references: [],
+      challenged_agents: [],
+      policy_positions: {},
+      score_snapshot: {},
+      estimated_metrics: {},
+      calculations: [],
+      memory_references: [],
+      research_points: [],
+    })),
+    round_summaries: [
+      {
+        round: 1,
+        synopsis: "The latest prompt looks outside the business-advice scope of this demo.",
+        consensus_points: ["Redirect to a business-focused question."],
+        conflict_points: [],
+        open_questions: samplePrompts,
+        numeric_highlights: { average_confidence: 94 },
+      },
+    ],
+    conflicts: [],
+    final_output: {
+      decision: "MODIFY",
+      confidence: 94,
+      key_reasons: [
+        "This demo works best when the prompt is about a business decision or startup plan.",
+        `The last prompt looked like a general question: "${String(message).trim().slice(0, 120)}${String(message).trim().length > 120 ? "..." : ""}"`,
+      ],
+      risks: ["General-knowledge prompts produce weak advisor output because the app is tuned for business cases."],
+      recommended_actions: samplePrompts,
+    },
+    actions: {
+      execution_plan: samplePrompts.map((prompt, index) => ({
+        step: prompt,
+        owner: "CEO Agent",
+        timeline: index === 0 ? "Try now" : "Optional",
+        success_metric: "The next prompt is clearly about a business decision.",
+      })),
+      marketing_strategy: {
+        audience: "Demo user",
+        positioning: "Business-advice demo",
+        core_message: "Ask about a business idea, market, pricing, costs, risks, or launch timing.",
+        channels: [],
+        ad_angles: [],
+      },
+      financial_plan: {
+        assumptions: [],
+        monthly_costs: [],
+        revenue_projection: [],
+        roi_estimate: "No estimate yet because this was not a business case.",
+      },
+      hiring_plan: {
+        roles: [],
+        hiring_sequence: ["No hiring advice yet because this was not a business case."],
+      },
+    },
+    scenario_results: [],
+    explainability: {
+      top_influencer: addressedAgents[0],
+      conflicts: [],
+      final_reasoning_summary:
+        "The request was redirected because it looks like a general question instead of a business decision. The app is now guiding the user toward a better prompt.",
+      reasoning_trace: [
+        {
+          agent_name: addressedAgents[0],
+          influence_score: 1,
+          stance: "MODIFY",
+          summary: redirectMessage,
+        },
+      ],
+    },
+    memory_summary: {
+      recalled_simulations: 0,
+      prior_failures: [],
+      learned_adjustments: ["Redirect general questions toward business prompts."],
+      prior_agent_arguments: {},
+    },
+    validation: {
+      decisions_made: true,
+      multiple_scenarios_simulated: false,
+      actions_generated: true,
+      memory_used: false,
+      passed: true,
+    },
+  };
 }
 
 function buildLocalFallbackAnalysis(payload) {
