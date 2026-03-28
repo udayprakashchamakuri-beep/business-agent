@@ -227,9 +227,14 @@ function App() {
       try {
         await runStreamingAnalysis(payload);
       } catch (streamError) {
-        console.warn("Streaming analysis failed, falling back to regular analysis.", streamError);
-        setResult(createEmptyResult(payload.company_name));
-        await runRegularAnalysis(payload);
+        if (streamError?.streamHadData) {
+          console.warn("Streaming analysis was interrupted after partial output. Keeping streamed result.", streamError);
+          setError("The live discussion stream stopped early, so the latest visible result was kept.");
+        } else {
+          console.warn("Streaming analysis failed before any output, falling back to regular analysis.", streamError);
+          setResult(createEmptyResult(payload.company_name));
+          await runRegularAnalysis(payload);
+        }
       }
     } catch (submissionError) {
       const rawMessage = submissionError?.message || "Unable to analyze the business problem.";
@@ -247,6 +252,7 @@ function App() {
   }
 
   async function runStreamingAnalysis(payload) {
+    let streamHadData = false;
     const response = await fetchApi("/analyze/stream", {
       method: "POST",
       credentials: "include",
@@ -282,7 +288,9 @@ function App() {
       for (const line of lines.map((entry) => entry.trim()).filter(Boolean)) {
         const payloadLine = JSON.parse(line);
         if (payloadLine.type === "error") {
-          throw new Error(payloadLine.error || "Unknown streaming error.");
+          const streamError = new Error(payloadLine.error || "Unknown streaming error.");
+          streamError.streamHadData = streamHadData;
+          throw streamError;
         }
         if (payloadLine.type === "final") {
           setResult(payloadLine.result);
@@ -293,6 +301,7 @@ function App() {
           }
           return;
         }
+        streamHadData = true;
         setResult((current) => mergeStreamEvent(current ?? createEmptyResult(payload.company_name), payloadLine));
       }
     }
