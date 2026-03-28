@@ -9,7 +9,7 @@
   "crons": [
     {
       "path": "/autonomy/cron",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 6 * * *"
     }
   ],
   "routes": [

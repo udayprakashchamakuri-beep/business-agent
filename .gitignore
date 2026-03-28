@@ -19,3 +19,5 @@ get-pip.py
 
 .env
 .env.*
+
+.vercel

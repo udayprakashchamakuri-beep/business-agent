@@ -1,5 +1,7 @@
 export const API_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
+  "https://iith-one.vercel.app",
+  "https://iith-diwme0371-udayprakashchamakuri-5279s-projects.vercel.app",
   "https://skill-deploy-0ppx8gx7h4-n1pkbd8p3.vercel.app",
   "https://skill-deploy-0ppx8gx7h4.vercel.app",
   "https://skill-deploy-0pp-git-1c911a-udayprakashchamakuri-5279s-projects.vercel.app",
