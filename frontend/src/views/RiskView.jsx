@@ -85,11 +85,11 @@ function RiskView({ riskMetrics, riskAlerts }) {
           "M 410 170 C 520 220, 630 210, 730 130",
         ],
         nodes: [
-          { x: 110, y: 170, size: 10, tone: "danger" },
-          { x: 270, y: 130, size: 8, tone: "accent" },
-          { x: 410, y: 170, size: 12, tone: "danger" },
-          { x: 560, y: 210, size: 8, tone: "accent" },
-          { x: 730, y: 130, size: 10, tone: "danger" },
+          { x: 110, y: 170, size: 10, tone: "danger", label: "Student footfall", dx: -34, dy: -18 },
+          { x: 270, y: 130, size: 8, tone: "accent", label: "Event demand", dx: -26, dy: -18 },
+          { x: 410, y: 170, size: 12, tone: "danger", label: "Rent pressure", dx: -22, dy: 28 },
+          { x: 560, y: 210, size: 8, tone: "accent", label: "Upkeep cost", dx: -16, dy: 28 },
+          { x: 730, y: 130, size: 10, tone: "danger", label: "Cash drain", dx: -18, dy: -18 },
         ],
       };
     }
@@ -101,12 +101,12 @@ function RiskView({ riskMetrics, riskAlerts }) {
           "M 240 155 L 300 245 L 450 250 L 540 120",
         ],
         nodes: [
-          { x: 120, y: 200, size: 8, tone: "success" },
-          { x: 240, y: 155, size: 10, tone: "accent" },
-          { x: 300, y: 245, size: 8, tone: "success" },
-          { x: 410, y: 175, size: 10, tone: "accent" },
-          { x: 540, y: 120, size: 12, tone: "danger" },
-          { x: 710, y: 165, size: 8, tone: "success" },
+          { x: 120, y: 200, size: 8, tone: "success", label: "Snack supply", dx: -24, dy: 26 },
+          { x: 240, y: 155, size: 10, tone: "accent", label: "PC setup", dx: -16, dy: -18 },
+          { x: 300, y: 245, size: 8, tone: "success", label: "Repairs", dx: -12, dy: 26 },
+          { x: 410, y: 175, size: 10, tone: "accent", label: "Staff cover", dx: -18, dy: -18 },
+          { x: 540, y: 120, size: 12, tone: "danger", label: "Peak downtime", dx: -24, dy: -18 },
+          { x: 710, y: 165, size: 8, tone: "success", label: "Recovery", dx: -12, dy: 26 },
         ],
       };
     }
@@ -118,12 +118,12 @@ function RiskView({ riskMetrics, riskAlerts }) {
         "M 260 260 C 330 210, 420 205, 520 245",
       ],
       nodes: [
-        { x: 120, y: 150, size: 8, tone: "accent" },
-        { x: 250, y: 115, size: 6, tone: "success" },
-        { x: 420, y: 180, size: 12, tone: "danger" },
-        { x: 580, y: 230, size: 8, tone: "accent" },
-        { x: 710, y: 145, size: 10, tone: "danger" },
-        { x: 320, y: 230, size: 6, tone: "success" },
+        { x: 120, y: 150, size: 8, tone: "accent", label: "Fit-out spend", dx: -20, dy: -18 },
+        { x: 250, y: 115, size: 6, tone: "success", label: "Demand test", dx: -18, dy: -18 },
+        { x: 420, y: 180, size: 12, tone: "danger", label: "Launch strain", dx: -18, dy: 28 },
+        { x: 580, y: 230, size: 8, tone: "accent", label: "Staffing gap", dx: -20, dy: 28 },
+        { x: 710, y: 145, size: 10, tone: "danger", label: "Cash pressure", dx: -20, dy: -18 },
+        { x: 320, y: 230, size: 6, tone: "success", label: "Ops check", dx: -12, dy: 28 },
       ],
     };
   }, [mapView]);
@@ -237,6 +237,17 @@ function RiskView({ riskMetrics, riskAlerts }) {
 
       <div className="risk-grid">
         <section className="panel threat-map-panel">
+          <div className="panel-topline threat-map-topline">
+            <div>
+              <h2>Risk Path</h2>
+              <p>Read left to right through the launch. Higher points mean more pressure.</p>
+            </div>
+            <div className="threat-mini-guide">
+              <span>Red means urgent</span>
+              <span>Yellow means watch closely</span>
+            </div>
+          </div>
+
           <div className="map-overlay map-overlay-top">
             <article className="threat-badge danger">
               <span>Main risk</span>
@@ -264,13 +275,23 @@ function RiskView({ riskMetrics, riskAlerts }) {
                   <path key={index} d={path} className="threat-map-path" />
                 ))}
                 {mapDiagram.nodes.map((node, index) => (
-                  <circle
-                    key={`${node.x}-${node.y}-${index}`}
-                    cx={node.x}
-                    cy={node.y}
-                    r={node.size}
-                    className={`threat-map-node tone-${node.tone}`}
-                  />
+                  <g key={`${node.x}-${node.y}-${index}`} className="threat-map-point">
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={node.size}
+                      className={`threat-map-node tone-${node.tone}`}
+                    />
+                    {node.label ? (
+                      <text
+                        x={node.x + (node.dx ?? 0)}
+                        y={node.y + (node.dy ?? 0)}
+                        className={`threat-map-label tone-${node.tone}`}
+                      >
+                        {node.label}
+                      </text>
+                    ) : null}
+                  </g>
                 ))}
               </svg>
             </div>
